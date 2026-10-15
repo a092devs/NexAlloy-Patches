@@ -12,7 +12,7 @@ object Patches2eno : PatchBundle {
         // Targets are the versions the patches were last tested with.
         AppPatchInfo(
             "Spotify", "com.spotify.music", SpotifyPatches,
-            targets = listOf(AppTarget("9.1.88.2204")), appIconColor = 0x1ED760,
+            targets = emptyList(), appIconColor = 0x1ED760,
         ),
         AppPatchInfo(
             "Instagram", "com.instagram.android", InstagramPatches,

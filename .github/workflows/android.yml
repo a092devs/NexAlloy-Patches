@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
-        submodules: true
+        submodules: recursive
 
     - name: set up JDK
       uses: actions/setup-java@v5
@@ -22,11 +22,32 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    - name: set up Android SDK
+      uses: android-actions/setup-android@v4
+      with:
+        packages: 'platforms;android-37 build-tools;37.0.0 platform-tools'
+
     - name: Unit tests
       run: ./gradlew testDebugUnitTest
 
     - name: Build patch bundles
       run: ./gradlew assembleBundle
+
+    - name: Verify generated bundles
+      run: |
+        ls -la bundles/*/build/outputs/bundle/*.nxb
+        count=$(ls -1 bundles/*/build/outputs/bundle/*.nxb 2>/dev/null | wc -l)
+        if [ "$count" -eq 0 ]; then
+          echo "Error: No .nxb patch bundles were generated!" >&2
+          exit 1
+        fi
+        for f in bundles/*/build/outputs/bundle/*.nxb; do
+          if [ ! -s "$f" ]; then
+            echo "Error: Bundle artifact $f is empty!" >&2
+            exit 1
+          fi
+          echo "Verified non-empty bundle: $f ($(stat -c%s "$f") bytes)"
+        done
 
     - name: Upload patch bundles
       uses: actions/upload-artifact@v7
