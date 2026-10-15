@@ -1,81 +1,120 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - '*.*.*'
-  # Releases the selected ref under a new tag, e.g. when tags cannot be pushed.
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, X.Y.Z or X.Y.Z-suffix for a pre-release'
+        description: "Release version (e.g. 1.0.0)"
         required: true
-      delete:
-        description: 'Also delete the releases and tags whose tag contains this text, e.g. -alpha'
-        required: false
+        type: string
+  push:
+    tags:
+      - "*.*.*"
 
-env:
-  TAG: ${{ inputs.tag || github.ref_name }}
+permissions:
+  contents: write
 
 jobs:
-  release:
+  build-and-release:
+    name: Build and publish NXB bundles
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
-    - name: set up JDK
-      uses: actions/setup-java@v5
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
 
-    - name: set up Android SDK
-      uses: android-actions/setup-android@v4
-      with:
-        packages: 'platforms;android-37 build-tools;37.0.0 platform-tools'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-37 build-tools;37.0.0 platform-tools'
 
-    - name: Build patch bundles
-      run: ./gradlew assembleBundle
+      - name: Build bundles
+        run: ./gradlew assembleBundle --stacktrace
 
-    - name: Verify generated bundles
-      run: |
-        ls -la bundles/*/build/outputs/bundle/*.nxb
-        count=$(ls -1 bundles/*/build/outputs/bundle/*.nxb 2>/dev/null | wc -l)
-        if [ "$count" -eq 0 ]; then
-          echo "Error: No .nxb patch bundles were generated for release!" >&2
-          exit 1
-        fi
-        for f in bundles/*/build/outputs/bundle/*.nxb; do
-          if [ ! -s "$f" ]; then
-            echo "Error: Release bundle artifact $f is empty!" >&2
+      - name: Verify generated bundles
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(bundles/*/build/outputs/bundle/*.nxb)
+
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::Build completed but no .nxb files were found."
+            find bundles -type f -path '*/build/outputs/*' -print
             exit 1
           fi
-          echo "Verified non-empty release bundle: $f ($(stat -c%s "$f") bytes)"
-        done
 
-    # NexAlloy installs every .nxb asset of the latest release of a patch source.
-    - name: Create release
-      run: |
-        FLAGS=""
-        # Tags like 1.0.0-beta are pre-releases.
-        if [[ "${{ env.TAG }}" == *-* ]]; then FLAGS="--prerelease"; fi
-        gh release create ${{ env.TAG }} bundles/*/build/outputs/bundle/*.nxb $FLAGS --target "${{ github.sha }}" --title "${{ env.TAG }}" --generate-notes
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mkdir -p release-assets
 
-    - name: Delete superseded releases
-      if: inputs.delete != ''
-      run: |
-        gh release list --limit 200 --json tagName --jq '.[].tagName' > tags
-        for tag in $(grep -F -- "$PATTERN" tags | grep -vxF -- "$TAG" || true); do
-          gh release delete "$tag" --cleanup-tag --yes
-        done
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PATTERN: ${{ inputs.delete }}
+          for file in "${files[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Bundle is empty: $file"
+              exit 1
+            fi
+
+            cp "$file" release-assets/
+            echo "Verified: $file ($(stat -c%s "$file") bytes)"
+          done
+
+          echo "Generated ${#files[@]} bundle(s):"
+          ls -lh release-assets/
+
+      - name: Determine release tag
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$REF_NAME"
+          fi
+
+          if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid release tag: $tag"
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          assets=(release-assets/*.nxb)
+
+          if (( ${#assets[@]} == 0 )); then
+            echo "::error::No verified NXB assets available to publish."
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            flags=()
+
+            if [[ "$TAG" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+
+            gh release create "$TAG" \
+              "${assets[@]}" \
+              "${flags[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --generate-notes
+          fi
