@@ -14,7 +14,7 @@ To add it manually, add the patch source `2eno/NexAlloyNext-Patches`. NexAlloy i
 
 ### NexAlloy Patches (`nexalloy-*.nxb`)
 
-Ported from Morphe, ReVanced and hoodles. NexAlloyNext recommends the YouTube, YouTube Music and Reddit versions the Morphe patches are tested with.
+Ported from Morphe and ReVanced. NexAlloyNext recommends the YouTube, YouTube Music and Reddit versions the Morphe patches are tested with.
 
 | App | Patches |
 | --- | --- |
@@ -22,10 +22,6 @@ Ported from Morphe, ReVanced and hoodles. NexAlloyNext recommends the YouTube, Y
 | YouTube Music | Remove music video ads, background playback, hide upgrade button and "Get Music Premium" label, exclusive audio playback |
 | Reddit | Hide ads, sanitize sharing links, start as guest |
 | Google Photos | Spoof Pixel XL |
-| Photomath | Unlock plus |
-| Threads | Hide ads |
-| Strava | Unlock subscription features, disable subscription suggestions |
-| AllTrails | Enable Peak membership |
 
 ### Piko Patches (`piko-*.nxb`)
 
@@ -40,20 +36,17 @@ Ported from [Piko](https://github.com/crimera/piko).
 
 ### 2eno Patches (`2eno-*.nxb`)
 
-Spotify, Kleinanzeigen, Untappd and InterPals patches, sharing their extension code with
+Spotify and Instagram Stealth Follow patches, sharing their extension code with
 [2eno Patches](https://github.com/2eno/2eno-patches) for Morphe. 
 
 | App | Patches |
 | --- | --- |
 | Spotify | Mute audio ads, hide ad sections, ad views, context menu upsells, popup ads, playlist ads, video ads and the Premium tab, fix third party launcher widgets, sanitize sharing links, Material You theme, rounded corners |
-| Kleinanzeigen | Hide ads, hide Pur, sanitize sharing links |
-| Untappd | Hide ads, feed ads and sponsored content |
-| InterPals | Hide ads, disable ad placements, download photos, feed age and gender filter |
+| Instagram | Stealth follow (view public accounts without following) |
 
 ## ⭐ Credits
 
 [NexAlloy](https://github.com/NexAlloy/NexAlloy): the LSPosed module these patches were ported for, by ChsBuffer  
 [Morphe](https://morphe.software): Transform Your Android Apps  
 [ReVanced](https://revanced.app): Continuing the legacy of Vanced at [revanced.app](https://revanced.app)  
-[Piko](https://github.com/crimera/piko): Instagram and X patches  
-[hoodles Morphe Patches](https://github.com/hoo-dles/morphe-patches): AllTrails patches
+[Piko](https://github.com/crimera/piko): Instagram and X patches

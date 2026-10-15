@@ -21,7 +21,7 @@ val VersionCheck = patch {
         .getPackageInfo(appContext.packageName, 0).versionName!!
 
     fun isEqualsOrGreaterThan(version: String): Boolean {
-        return versionName >= version
+        return io.github.nexalloy.patches.isVersionAtLeast(versionName, version)
     }
 
     is_2025_48_0_or_greater = isEqualsOrGreaterThan("2025.48.0")

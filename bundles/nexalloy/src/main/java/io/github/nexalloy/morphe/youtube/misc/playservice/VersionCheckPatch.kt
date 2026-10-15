@@ -106,7 +106,7 @@ val VersionCheck = patch {
     val versionName = appContext.packageManager
         .getPackageInfo(appContext.packageName, 0).versionName!!
 
-    fun isEqualsOrGreaterThan(version: String) = versionName >= version
+    fun isEqualsOrGreaterThan(version: String) = io.github.nexalloy.patches.isVersionAtLeast(versionName, version)
 
     is_20_22_or_greater = isEqualsOrGreaterThan("20.22.00")
     is_20_26_or_greater = isEqualsOrGreaterThan("20.26.00")
