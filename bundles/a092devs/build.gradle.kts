@@ -7,8 +7,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.nexalloy.patches.a092devs"
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
     }
 }
 
@@ -28,6 +28,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    testImplementation(libs.nexalloy.patcher)
     testImplementation(kotlin("test-junit5"))
     testImplementation(libs.junit.jupiter.params)
 }

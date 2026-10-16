@@ -51,7 +51,13 @@ object A092DevsPatches : PatchBundle {
             appName = "Proton VPN",
             packageName = "ch.protonvpn.android",
             patches = ProtonVpnPatches,
-            targets = listOf(AppTarget("5.19.72.0"), AppTarget("5.19.43.0")),
+            targets = listOf(
+                AppTarget("5.20.74.0"),
+                AppTarget("5.20.57.0"),
+                AppTarget("5.20.39.0"),
+                AppTarget("5.19.72.0"),
+                AppTarget("5.19.43.0"),
+            ),
             appIconColor = 0x6D4AFF,
         ),
         AppPatchInfo(

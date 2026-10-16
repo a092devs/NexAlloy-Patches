@@ -95,4 +95,16 @@ Ported material: patches/src/main/kotlin/app/paresh/patches/protonvpn/ — Proto
 telemetry worker and observability collection blocking, upgrade onboarding launcher
 suppression, and NetShield UI availability unlock.
 ================================================================================
+hxreborn/morphe-patches
+https://github.com/hxreborn/morphe-patches
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/app/morphe/patches/protonvpn/ — server change delay
+bypass (getChangeServerLongDelayInSeconds, getChangeServerShortDelayInSeconds), client-side
+restriction bypasses for split tunneling, custom DNS, LAN connections, and promotions suppression.
+================================================================================
+hoo-dles/morphe-patches
+https://github.com/hoo-dles/morphe-patches
+License: GPL-3.0
+Ported material: Proton VPN delay and network permission patches.
+================================================================================
 

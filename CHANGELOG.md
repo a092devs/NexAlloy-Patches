@@ -5,6 +5,15 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.5.0
+
+- `a092devs` 1.4.0:
+  * Expanded Proton VPN (`ch.protonvpn.android`) runtime patches ported from `hxreborn/morphe-patches` and `hoo-dles/morphe-patches`:
+    - Remove server change delay: eliminates cooldown wait periods between server switching on free plans (`AppConfigResponse`).
+    - Unlock advanced settings & NetShield: unlocks NetShield ad/tracker blocking, split tunneling (app & IP routing), custom DNS, and allow LAN connections.
+    - Suppress upgrade promotions: eliminates onboarding upgrade dialogs, promotional alerts, and account upgrade banners.
+    - Updated verified compatibility targets to include `5.20.74.0`, `5.20.57.0`, and `5.20.39.0` alongside `5.19.x`.
+
 ## 2.4.0
 
 - `nexalloy` 1.0.7: ported four runtime player and layout patches from Morphe/yollAmeF:
