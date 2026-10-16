@@ -14,8 +14,7 @@ class InstalledAppAuditTest {
             if (it.name == "nexalloy") it.parentFile?.parentFile ?: it else it
         }
         val docsFile = File(projectRoot, "docs/installed-app-patch-audit.md")
-        val reportsFile = File(projectRoot, "reports/installed-app-patch-audit.md")
-        val auditFile = if (docsFile.exists()) docsFile else reportsFile
+        val auditFile = docsFile
 
         assertTrue(auditFile.exists(), "Audit file must exist at ${auditFile.path}")
 

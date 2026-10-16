@@ -5,6 +5,24 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.6.0
+
+- `a092devs` 1.4.0:
+  * Integrated comprehensive Instagram (`com.instagram.android`) patch suite ported from `SysAdminDoc/HushGram`, targeting `451.0.0.53.80`, `450.0.0.46.79`, and `447.0.0.55.81`:
+    - Hide ads: suppresses sponsored posts, feed ad units (`INTENT_AWARE_AD_PIVOT`, `STAND_ALONE_MULTI_AD_PIVOT`), injected reels, and profile ads.
+    - Hide suggested posts & reels: filters explore chaining, suggestions in feed, and recommended accounts.
+    - Ghost mode: anonymous story viewing (blocks `media/seen/` receipts), anonymous live watching (blocks heartbeat presence pings), anonymous DMs (blocks seen/read receipts), and disables typing indicators.
+    - Privacy: removes `FLAG_SECURE` for screenshots and screen recordings in disappearing chats, blocks screenshot detection callbacks and observers, sanitizes tracking tags (`igsh`, `utm_*`, `fbclid`) from share URLs, bypasses in-app browser to open links externally, and disables analytics/telemetry.
+    - Download any media without watermarks, ask before like, ask before refresh, and unlocked developer options.
+  * Expanded Facebook (`com.facebook.katana`) patches ported from `SysAdminDoc/Hushfacebook` targeting `582.0.0.50.54` and `581.0.0.45.54`:
+    - Hide sponsored posts, feed ads, comment sheet ad pills, sponsored reels, and marketplace ads.
+    - Block ad telemetry, background ad prefetch jobs, and advertising ID tracking sinks.
+    - Bypass in-app browser to open links in default system browser, and download media.
+- `piko`:
+  * Migrated Instagram patches into `a092devs.nxb` to focus solely on X (Twitter).
+- Repository maintenance:
+  * Removed untracked/redundant `reports/` directory from commit tree and updated `.gitignore`.
+
 ## 2.5.0
 
 - `a092devs` 1.4.0:

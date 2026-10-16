@@ -1,4 +1,4 @@
-package io.github.nexalloy.piko.instagram.shared
+package io.github.nexalloy.a092devs.instagram
 
 import android.content.Context
 import android.content.Intent
@@ -7,20 +7,23 @@ import java.net.URI
 import java.util.Locale
 
 /**
- * Link handling ported from Piko (https://github.com/crimera/piko).
+ * Link sanitizer and external browser dispatcher ported from SysAdminDoc/HushGram (GPL-3.0).
  */
-object Links {
+object InstagramLinks {
     private const val FIRST_PARTY_DOMAIN = "instagram.com"
 
-    /** Query parameters of Instagram links, that change what is opened. */
+    /** Query parameters of Instagram links that change what is opened. */
     private val functionalParameters = setOf("comment_id", "img_index", "open_comments", "story_media_id")
 
-    /** Query parameters of other links, that only track the share. */
-    private val trackingParameters = setOf("igsh", "igsi", "utm_source", "utm_medium", "utm_content", "fbclid", "si")
+    /** Query parameters of links that only track the user or share context. */
+    private val trackingParameters = setOf(
+        "igsh", "igsi", "utm_source", "utm_medium", "utm_campaign",
+        "utm_content", "utm_term", "fbclid", "si", "ref", "ref_src"
+    )
 
     /**
-     * Removes all but functional query parameters from Instagram links
-     * and the tracking parameters from other links.
+     * Removes tracking parameters from external URLs and preserves only functional
+     * parameters for first-party Instagram URLs.
      */
     fun sanitizeUrl(url: String): String = try {
         val uri = URI(url)
@@ -56,15 +59,13 @@ object Links {
     }
 
     /**
-     * Opens the target of an Instagram redirect link (`https://l.instagram.com/?u=<url>&e=<tracking id>`)
-     * in the default browser.
-     *
-     * @return If the link was opened.
+     * Opens an Instagram redirect link or web URL in an external browser.
      */
     fun openExternally(context: Context, url: String): Boolean {
-        val target = runCatching { Uri.parse(url).getQueryParameter("u") }.getOrNull() ?: return false
+        val target = runCatching { Uri.parse(url).getQueryParameter("u") }.getOrNull() ?: url
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(sanitizeUrl(target)))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return runCatching { context.startActivity(intent) }.isSuccess
     }
 }
+

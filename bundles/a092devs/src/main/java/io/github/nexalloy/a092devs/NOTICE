@@ -74,12 +74,22 @@ other custom resources), and the accessibility-layout flag, which no longer exis
 SysAdminDoc/Hushfacebook
 https://github.com/SysAdminDoc/Hushfacebook
 License: GPL-3.0
-Ported material: patches/src/main/kotlin/app/morphe/patches/facebook/misc/screenshots/
-(AllowScreenshots and BlockScreenshotDetection for Facebook 582.0.0.50.54). Upstream rewrites
-the FLAG_SECURE writes and the screenshot observer in the APK; this port clears FLAG_SECURE on
-the Window/PhoneWindow/WindowManagerImpl calls those sites reach and no-ops
-com.facebook.screenshot.ScreenshotContentObserver.onChange plus the Android 14 screen-capture
-and Android 15 screen-recording registration callbacks. Not ported: the in-app patch settings.
+Ported material: Facebook 582.0.0.50.54 and 581.0.0.45.54 — AllowScreenshots and
+BlockScreenshotDetection (patches/src/main/kotlin/app/morphe/patches/facebook/misc/screenshots/),
+HideSponsoredPosts, HideSponsoredReels, HideMarketplaceAds, BlockTelemetry, DownloadMedia, and
+OpenLinksExternally. Clears FLAG_SECURE on Window/PhoneWindow/WindowManagerImpl calls, suppresses
+ScreenshotContentObserver.onChange and Android 14+ screen-capture callbacks, drops sponsored feed
+and story items, filters Marketplace ads, blocks audience network and analytics event sinks, and
+routes external links to the default system browser.
+================================================================================
+SysAdminDoc/HushGram
+https://github.com/SysAdminDoc/HushGram
+License: GPL-3.0
+Ported material: Instagram 451.0.0.53.80, 450.0.0.46.79, and 447.0.0.55.81 — HideAds,
+HideSuggestedPosts, HideReelsAds, ViewStoriesAnonymously, ViewLiveAnonymously, ViewDmsAnonymously,
+DisableTypingStatus, AllowScreenshots, BlockScreenshotDetection, SanitizeShareLinks,
+OpenLinksExternally, DisableAnalytics, DownloadMedia, AskBeforeLike, AskBeforeRefresh,
+DisableVideoAutoplay, RemoveBuildExpiredPopup, and UnlockDeveloperOptions.
 ================================================================================
 Akshayykadam/PixelBoard
 https://github.com/Akshayykadam/PixelBoard

@@ -6,6 +6,7 @@ import io.github.nexalloy.PatchBundle
 import io.github.nexalloy.a092devs.discord.DiscordPatches
 import io.github.nexalloy.a092devs.facebook.FacebookPatches
 import io.github.nexalloy.a092devs.gboard.GboardPatches
+import io.github.nexalloy.a092devs.instagram.InstagramPatches
 import io.github.nexalloy.a092devs.linkedin.LinkedInPatches
 import io.github.nexalloy.a092devs.mixplorer.MixplorerPatches
 import io.github.nexalloy.a092devs.protonvpn.ProtonVpnPatches
@@ -25,8 +26,19 @@ object A092DevsPatches : PatchBundle {
             appName = "Facebook",
             packageName = "com.facebook.katana",
             patches = FacebookPatches,
-            targets = listOf(AppTarget("582.0.0.50.54")),
+            targets = listOf(AppTarget("582.0.0.50.54"), AppTarget("581.0.0.45.54")),
             appIconColor = 0x0866FF,
+        ),
+        AppPatchInfo(
+            appName = "Instagram",
+            packageName = "com.instagram.android",
+            patches = InstagramPatches,
+            targets = listOf(
+                AppTarget("451.0.0.53.80"),
+                AppTarget("450.0.0.46.79"),
+                AppTarget("447.0.0.55.81"),
+            ),
+            appIconColor = 0xE1306C,
         ),
         AppPatchInfo(
             appName = "Gboard",
