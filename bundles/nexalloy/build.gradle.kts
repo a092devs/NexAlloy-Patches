@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.nexalloy.patches"
-        versionCode = 5
+        versionCode = 7
         val patchVersion = Properties().apply {
             rootProject.file("morphe-patches/gradle.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }["version"]
@@ -103,17 +103,66 @@ abstract class GenerateMorpheTargetsTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDirectory: DirectoryProperty
 
+    companion object {
+        private val VERIFIED_UPSTREAM_TARGETS = mapOf(
+            "YOUTUBE" to listOf(
+                // Upstream Morphe verified targets (stable 21.20.405, newer are experimental)
+                "new AppTarget(\"21.41.525\", true)",
+                "new AppTarget(\"21.40.161\", true)",
+                "new AppTarget(\"21.39.522\", true)",
+                "new AppTarget(\"21.38.130\", true)",
+                "new AppTarget(\"21.28.208\", true)",
+                "new AppTarget(\"21.23.492\", true)",
+                "new AppTarget(\"21.20.405\", false)",
+                "new AppTarget(\"21.16.256\", false)",
+                "new AppTarget(\"20.51.39\", false)",
+                "new AppTarget(\"20.21.37\", false)"
+            ),
+            "MUSIC" to listOf(
+                // Upstream Morphe verified targets (stable 9.20.53, newer are experimental)
+                "new AppTarget(\"9.41.52\", true)",
+                "new AppTarget(\"9.40.51\", true)",
+                "new AppTarget(\"9.39.52\", true)",
+                "new AppTarget(\"9.20.53\", false)",
+                "new AppTarget(\"9.15.51\", false)"
+            ),
+            "REDDIT" to listOf(
+                // Upstream Morphe verified targets (stable 2026.24.0, newer are experimental)
+                "new AppTarget(\"2026.41.0\", true)",
+                "new AppTarget(\"2026.40.0\", true)",
+                "new AppTarget(\"2026.39.0\", true)",
+                "new AppTarget(\"2026.24.0\", false)",
+                "new AppTarget(\"2026.10.0\", false)"
+            )
+        )
+    }
+
     @TaskAction
     fun generate() {
-        val fields = constants.files.sortedBy { it.path }.joinToString("\n") { file ->
-            val name = file.parentFile.parentFile.name.uppercase()
-            val targets = Regex("""AppTarget\((.*?)\)""", RegexOption.DOT_MATCHES_ALL).findAll(file.readText())
-                .mapNotNull { match ->
-                    val version = Regex("""version\s*=\s*"([^"]+)"""").find(match.groupValues[1])?.groupValues?.get(1)
-                        ?: return@mapNotNull null
-                    val experimental = "isExperimental = true" in match.groupValues[1]
-                    "new AppTarget(\"$version\", $experimental)"
-                }.toList()
+        val appNames = listOf("YOUTUBE", "MUSIC", "REDDIT")
+        val fields = appNames.joinToString("\n") { name ->
+            val file = constants.files.firstOrNull { it.path.replace('\\', '/').contains("/$name/shared/".lowercase()) }
+            val verified = VERIFIED_UPSTREAM_TARGETS[name] ?: emptyList()
+            val targets = if (file != null && file.exists()) {
+                val parsed = Regex("""AppTarget\((.*?)\)""", RegexOption.DOT_MATCHES_ALL).findAll(file.readText())
+                    .mapNotNull { match ->
+                        val version = Regex("""version\s*=\s*"([^"]+)"""").find(match.groupValues[1])?.groupValues?.get(1)
+                            ?: return@mapNotNull null
+                        val experimental = "isExperimental = true" in match.groupValues[1]
+                        "new AppTarget(\"$version\", $experimental)"
+                    }.toList()
+                if (verified.isNotEmpty()) {
+                    val verifiedVersions = verified.mapNotNull { Regex("""new AppTarget\("([^"]+)"""").find(it)?.groupValues?.get(1) }.toSet()
+                    verified + parsed.filter { p ->
+                        val v = Regex("""new AppTarget\("([^"]+)"""").find(p)?.groupValues?.get(1)
+                        v != null && v !in verifiedVersions
+                    }
+                } else {
+                    parsed
+                }
+            } else {
+                verified
+            }
             "    public static final List<AppTarget> $name = Arrays.asList(${targets.joinToString(", ")});"
         }
         val dir = outputDirectory.get().asFile.resolve("io/github/nexalloy/patches").apply { mkdirs() }
@@ -140,6 +189,7 @@ abstract class GenerateMorpheTargetsTask : DefaultTask() {
 abstract class GenerateStringsTask @Inject constructor(
 ) : DefaultTask() {
     @get:InputDirectory
+    @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val inputDirectory: DirectoryProperty
 
@@ -199,7 +249,9 @@ abstract class GenerateStringsTask @Inject constructor(
 
     @TaskAction
     fun action() {
+        if (!inputDirectory.isPresent) return
         val inputDir = inputDirectory.get().asFile
+        if (!inputDir.exists()) return
         val outputDir = outputDirectory.get().asFile
 
         runCatching {
@@ -226,6 +278,7 @@ abstract class GenerateStringsTask @Inject constructor(
 
 abstract class CopyResourcesTask @Inject constructor() : DefaultTask() {
     @get:InputDirectory
+    @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val inputDirectory: DirectoryProperty
 
@@ -234,7 +287,9 @@ abstract class CopyResourcesTask @Inject constructor() : DefaultTask() {
 
     @TaskAction
     fun action() {
+        if (!inputDirectory.isPresent) return
         val baseDir = inputDirectory.get().asFile
+        if (!baseDir.exists()) return
         val outputDir = outputDirectory.get().asFile
         outputDir.deleteRecursively()
 
@@ -277,15 +332,21 @@ androidComponents {
             )
         }
         variant.sources.java?.addGeneratedSourceDirectory(targetsTask, GenerateMorpheTargetsTask::outputDirectory)
+        val strFile = project.file("../../morphe-patches/patches/src/main/resources/addresources")
         val strTask = project.tasks.register<GenerateStringsTask>("generateStrings$variantName") {
-            inputDirectory.set(project.file("../../morphe-patches/patches/src/main/resources/addresources"))
+            if (strFile.exists()) {
+                inputDirectory.set(strFile)
+            }
         }
         variant.sources.res?.addGeneratedSourceDirectory(
             strTask, GenerateStringsTask::outputDirectory
         )
 
+        val resFile = project.file("../../morphe-patches/patches/src/main/resources")
         val resTask = project.tasks.register<CopyResourcesTask>("copyResources$variantName") {
-            inputDirectory.set(project.file("../../morphe-patches/patches/src/main/resources"))
+            if (resFile.exists()) {
+                inputDirectory.set(resFile)
+            }
         }
         variant.sources.res?.addGeneratedSourceDirectory(
             resTask, CopyResourcesTask::outputDirectory

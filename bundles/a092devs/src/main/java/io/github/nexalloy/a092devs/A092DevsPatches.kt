@@ -1,0 +1,72 @@
+package io.github.nexalloy.a092devs
+
+import io.github.nexalloy.AppPatchInfo
+import io.github.nexalloy.AppTarget
+import io.github.nexalloy.PatchBundle
+import io.github.nexalloy.a092devs.discord.DiscordPatches
+import io.github.nexalloy.a092devs.facebook.FacebookPatches
+import io.github.nexalloy.a092devs.gboard.GboardPatches
+import io.github.nexalloy.a092devs.linkedin.LinkedInPatches
+import io.github.nexalloy.a092devs.mixplorer.MixplorerPatches
+import io.github.nexalloy.a092devs.protonvpn.ProtonVpnPatches
+import io.github.nexalloy.a092devs.reddit.RedditPatches
+
+/** Entry point of the a092devs Patches bundle, named in its manifest. */
+object A092DevsPatches : PatchBundle {
+    override val apps = listOf(
+        AppPatchInfo(
+            appName = "Discord",
+            packageName = "com.discord",
+            patches = DiscordPatches,
+            targets = listOf(AppTarget("348.10")),
+            appIconColor = 0x5865F2,
+        ),
+        AppPatchInfo(
+            appName = "Facebook",
+            packageName = "com.facebook.katana",
+            patches = FacebookPatches,
+            targets = listOf(AppTarget("582.0.0.50.54")),
+            appIconColor = 0x0866FF,
+        ),
+        AppPatchInfo(
+            appName = "Gboard",
+            packageName = "com.google.android.inputmethod.latin",
+            patches = GboardPatches,
+            targets = listOf(AppTarget("18.4.1.985164140-beta-arm64-v8a")),
+            appIconColor = 0x4285F4,
+        ),
+        AppPatchInfo(
+            appName = "LinkedIn",
+            packageName = "com.linkedin.android",
+            patches = LinkedInPatches,
+            targets = listOf(AppTarget("4.1.1261"), AppTarget("4.1.1259"), AppTarget("4.1.1255.1")),
+            appIconColor = 0x0A66C2,
+        ),
+        AppPatchInfo(
+            appName = "MiXplorer",
+            packageName = "com.mixplorer",
+            patches = MixplorerPatches,
+        ),
+        AppPatchInfo(
+            appName = "Proton VPN",
+            packageName = "ch.protonvpn.android",
+            patches = ProtonVpnPatches,
+            targets = listOf(AppTarget("5.19.72.0"), AppTarget("5.19.43.0")),
+            appIconColor = 0x6D4AFF,
+        ),
+        AppPatchInfo(
+            appName = "Reddit",
+            packageName = "com.reddit.frontpage",
+            patches = RedditPatches,
+            targets = listOf(
+                AppTarget("2026.38.0"),
+                AppTarget("2026.37.0"),
+                AppTarget("2026.36.0"),
+                AppTarget("2026.24.0"),
+                AppTarget("2026.14.0"),
+            ),
+            appIconColor = 0xFF4500,
+        ),
+    )
+}
+

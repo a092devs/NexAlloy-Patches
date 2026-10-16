@@ -1,59 +1,186 @@
-# NexAlloyNext Patches
+# NexAlloyNext-Patches
 
-Patch bundles for [NexAlloyNext](https://github.com/2eno/NexAlloyNext), the LSPosed module that applies patch bundles from patch sources.
+Runtime bytecode patch bundles (`.nxb`) for [NexAlloyNext](https://github.com/a092devs/NexAlloyNext), the root + LSPosed dynamic patching ecosystem for Android.
 
 >[!IMPORTANT]
-> This is **NOT an official Morphe or ReVanced project**, do not ask their developers for help.
+> This is an independent runtime patch repository. Patches are compiled into `.nxb` bundles — signed APK containers loaded in-memory at process startup via LSPosed (API 101) and DexKit. Target APK files are **never modified, re-signed, or rebuilt**.
 
-## Usage
+---
 
-NexAlloyNext has this repository preset as a patch source: open NexAlloy > **Patch sources**, tap *NexAlloy Patches* and choose **Install**.
-To add it manually, add the patch source `2eno/NexAlloyNext-Patches`. NexAlloy installs every `.nxb` bundle of the latest release.
+## Architecture Overview
 
-## Patch bundles
+NexAlloy patches run entirely in-process using dynamic bytecode interception:
+- **No APK Modifications:** Original APKs and their signatures remain completely untouched on disk.
+- **Dynamic DexKit Discovery:** Methods, fields, and obfuscated signatures are resolved at runtime via DexKit opcode and string pattern matching, providing robust version resilience.
+- **Fail-Safe Isolation:** Patches execute in isolated runtime contexts with `runCatching` safeguards, preventing target app crashes when non-critical hooks fail.
+- **Format:** Patches are packaged as signed `.nxb` APK containers holding compiled Dex bytecode and a small manifest contract; NexAlloyNext loads them in-memory at process startup.
 
-### NexAlloy Patches (`nexalloy-*.nxb`)
+---
 
-Ported from Morphe, ReVanced and hoodles. NexAlloyNext recommends the YouTube, YouTube Music and Reddit versions the Morphe patches are tested with.
+## Bundle Structure & Contract
 
-| App | Patches |
-| --- | --- |
-| YouTube | Remove ads, SponsorBlock, background playback, sanitize sharing links, navigation buttons, swipe controls, video quality and playback speed options, hide layout components and video action buttons, Shorts resuming, video codecs, auto captions, alternative thumbnails, bypass image region restrictions |
-| YouTube Music | Remove music video ads, background playback, hide upgrade button and "Get Music Premium" label, exclusive audio playback |
-| Reddit | Hide ads, sanitize sharing links, start as guest |
-| Google Photos | Spoof Pixel XL |
-| Photomath | Unlock plus |
-| Threads | Hide ads |
-| Strava | Unlock subscription features, disable subscription suggestions |
-| AllTrails | Enable Peak membership |
+A `.nxb` file is a regular signed APK renamed at packaging time. NexAlloyNext reads four
+`meta-data` entries from its manifest:
 
-### Piko Patches (`piko-*.nxb`)
+| `meta-data` key | Content |
+|---|---|
+| `nexalloy.bundle.entry` | Class implementing `io.github.nexalloy.PatchBundle` (the bundle's entry point) |
+| `nexalloy.bundle.apiVersion` | Patcher API version the bundle was built against |
+| `nexalloy.bundle.author` | Author shown in the NexAlloy manager |
+| `nexalloy.bundle.description` | String resource describing the bundle |
 
-Ported from [Piko](https://github.com/crimera/piko).
+The entry point lists every supported app with its package identifier and the versions the
+patches were last verified against (`AppPatchInfo.targets`). The manager's compatibility engine
+compares those targets against the installed app version to drive compatibility badges and
+update recommendations — a bundle that declares no targets simply gets no version
+recommendation.
 
-| App | Patches |
-| --- | --- |
-| Instagram | Hide ads and suggested content, download media, anonymous viewing, disable analytics, layout and link options, and more |
-| X | Hide ads, recommendation items, recommended users and premium upsells, show sensitive media, remove view count, clear tracking params, no t.co links, and more |
+Resource package ids are assigned per bundle (`0x02`–`0x7e`, never the app id `0x7f`) and must
+be distinct for bundles loaded into the same app; NexAlloyNext refuses to install a bundle whose
+resource package id collides with an already installed one. See
+[bundles/README.md](bundles/README.md) for the full authoring guide.
 
-<sub>The Instagram and X patches are ported from [Piko](https://github.com/crimera/piko), see its [NOTICE](bundles/piko/src/main/java/io/github/nexalloy/piko/NOTICE).</sub>
+---
 
-### 2eno Patches (`2eno-*.nxb`)
+## Curated Patch Bundles
 
-Spotify, Kleinanzeigen, Untappd and InterPals patches, sharing their extension code with
-[2eno Patches](https://github.com/2eno/2eno-patches) for Morphe. 
+### 1. NexAlloy Patches (`nexalloy-*.nxb`)
+Core streaming, media, and productivity runtime patches.
 
-| App | Patches |
-| --- | --- |
-| Spotify | Mute audio ads, hide ad sections, ad views, context menu upsells, popup ads, playlist ads, video ads and the Premium tab, fix third party launcher widgets, sanitize sharing links, Material You theme, rounded corners |
-| Kleinanzeigen | Hide ads, hide Pur, sanitize sharing links |
-| Untappd | Hide ads, feed ads and sponsored content |
-| InterPals | Hide ads, disable ad placements, download photos, feed age and gender filter |
+| Target Application | Package Identifier | Key Patch Capabilities |
+|---|---|---|
+| **YouTube** | `com.google.android.youtube` | Remove video/feed ads, SponsorBlock, background playback, link sanitization, custom playback speeds & quality dialog, swipe controls, layout filtering, DeArrow, Litho node bypass, Shorts resuming, Ambient mode, Miniplayer, PiP seek buttons, Disable playlist autoplay |
+| **YouTube Music** | `com.google.android.apps.youtube.music` | Background playback, audio ad removal, exclusive audio playback, hide upgrade buttons |
+| **Reddit** | `com.reddit.frontpage` | Feed ad removal, comment ad state bypass, tracking link sanitizer |
+| **Google Photos** | `com.google.android.apps.photos` | Spoof Pixel XL features (enables unlimited original-quality cloud storage), DCIM folder backup control |
 
-## ⭐ Credits
+### 2. Piko Patches (`piko-*.nxb`)
+Privacy, media downloading, and social timeline enhancements.
 
-[NexAlloy](https://github.com/NexAlloy/NexAlloy): the LSPosed module these patches were ported for, by ChsBuffer  
-[Morphe](https://morphe.software): Transform Your Android Apps  
-[ReVanced](https://revanced.app): Continuing the legacy of Vanced at [revanced.app](https://revanced.app)  
-[Piko](https://github.com/crimera/piko): Instagram and X patches  
-[hoodles Morphe Patches](https://github.com/hoo-dles/morphe-patches): AllTrails patches
+| Target Application | Package Identifier | Key Patch Capabilities |
+|---|---|---|
+| **Instagram** | `com.instagram.android` | Ad and sponsored content blocking, direct media downloader, ghost/anonymous story viewing, disable typing indicators, strip link tracking |
+| **X (Twitter)** | `com.twitter.android` | Hide timeline ads, remove promoted trends/who to follow, direct media downloading, uncensor sensitive content, strip `t.co` tracking parameters |
+
+### 3. 2eno Patches (`2eno-*.nxb`)
+Audio and social client customizations.
+
+| Target Application | Package Identifier | Key Patch Capabilities |
+|---|---|---|
+| **Spotify** | `com.spotify.music` | Audio ad muting, hide ad views/video banners, hide Premium navigation tab, Dynamic Material You theme, custom rounded corners, tracking link cleaner |
+| **Instagram** | `com.instagram.android` | Stealth follow (view public profiles without triggering follow events) |
+
+### 4. a092devs Patches (`a092devs-*.nxb`)
+Community-ported privacy and sharing patches kept under the `a092devs` identity, with per-patch
+attribution in [bundles/a092devs/.../NOTICE](bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/NOTICE).
+
+| Target Application | Package Identifier | Key Patch Capabilities |
+|---|---|---|
+| **Discord** | `com.discord` | Disable crash reporting, telemetry and touch logging, install attribution, advertising identifiers (native entry points from Venus-Patches) |
+| **Facebook** | `com.facebook.katana` | Allow screenshots and block screenshot detection (Hushfacebook ports) |
+| **Gboard** | `com.google.android.inputmethod.latin` | Dynamic Phenotype flag detection + SharedPreferences hook for rounded keycaps, AI writing tools, scan text OCR, screenshot chips, emoji palette v2, smart compose, spellchecker suggestion chips, cursor trackpad, and more (PixelBoard & jasonwu1994 ports) |
+| **LinkedIn** | `com.linkedin.android` | Sanitize share links (copy/share paths), open `safety/go` links directly, block tracking (off by default) |
+| **MiXplorer** | `com.mixplorer` | Fix scoped-storage file sharing: hide unreadable `_data` paths from other apps on Android 11+ |
+| **Proton VPN** | `ch.protonvpn.android` | Disable telemetry and observability workers, suppress upgrade prompts, unlock NetShield UI availability (Paresh-Patches port) |
+| **Reddit** | `com.reddit.frontpage` | Screenshot-banner, link, refresh, redirect, navigation-bar, upvote-score and view-count ports (adobo) |
+
+
+---
+
+## Development
+
+Each bundle is a Gradle module under `bundles/`, registered in `settings.gradle.kts` and built
+with the local `nexalloy.bundle` plugin (see `build-logic/`). To build one bundle:
+
+```bash
+./gradlew :bundles:<name>:assembleBundle
+```
+
+A new bundle needs a `build.gradle.kts` declaring its entry class, author, description resource,
+and resource package id; the entry class implements `io.github.nexalloy.PatchBundle` and lists
+its supported apps. Patch hooks resolve target members at runtime and follow these conventions:
+
+- **Feature detection over version checks** — locate members with DexKit fingerprints or
+  `XposedHelpers.find*`, never by hardcoded versions.
+- **Fail safe** — wrap risky reflection in `runCatching` so a missing method skips its own patch
+  instead of crashing the target app.
+- **Register once** — never hook the same member twice; respect the user's enable/disable state.
+- **Honest targets** — only list versions the hooks were actually verified against.
+
+The full guide, including the manifest contract and resource package id rules, lives in
+[bundles/README.md](bundles/README.md).
+
+---
+
+## Building and Testing
+
+### Prerequisites
+- JDK 21 or JDK 25 LTS
+- Android SDK installed (`ANDROID_HOME` or `ANDROID_SDK_ROOT` configured)
+
+### Commands
+```bash
+# Run unit tests across all bundles
+./gradlew testDebugUnitTest
+
+# Assemble all .nxb release bundles
+./gradlew assembleBundle
+```
+
+The compiled bundles will be generated in `bundles/<bundle-name>/build/outputs/bundle/*.nxb`.
+
+### Testing
+
+Bundles are covered by plain JVM unit tests plus shared fingerprint tests that run against
+reference APKs dropped into each bundle's `binaries/` directory (named `<package name>…apk`,
+e.g. `com.example.app.1.2.3.apk`). Without those APKs the fingerprint test parameters are empty
+and only the JVM tests run. The shared test sources and DexKit native libraries live in
+`bundles/testing/`.
+
+---
+
+## Discovery & Release
+
+NexAlloyNext discovers bundles through **patch sources**. A source is either:
+
+- a GitHub repository (`owner/repo` or its URL) whose **latest release** provides the bundles as
+  `*.nxb` assets — pre-releases are only considered when the source opts in; or
+- the direct URL of a bundle JSON file:
+  ```json
+  { "version": "1.2.0", "download_url": "https://…/bundle.nxb", "description": "changelog" }
+  ```
+
+The curated default source is [`a092devs/NexAlloyNext-Patches`](https://github.com/a092devs/NexAlloyNext-Patches);
+further known sources can be added with one tap in the manager's Patches tab.
+
+Releases are automated in [`.github/workflows/release.yml`](.github/workflows/release.yml):
+pushing a tag matching `*.*.*` (or dispatching the workflow with a tag) runs the unit tests,
+builds every bundle with `assembleBundle`, verifies that each generated `.nxb` is non-empty, and
+attaches them to the GitHub release — hyphenated tags are published as pre-releases.
+[`.github/workflows/android.yml`](.github/workflows/android.yml) runs the same tests and build
+verification on every push and pull request.
+
+---
+
+## Verified Audit & Feasibility
+
+For the exhaustive audit of all user applications, runtime feasibility, verification evidence, and safety policies, see [docs/installed-app-patch-audit.md](docs/installed-app-patch-audit.md). A condensed architecture summary lives in [reports/installed-apps-audit.md](reports/installed-apps-audit.md).
+
+---
+
+## Credits & Acknowledgments
+
+- [2eno](https://github.com/2eno): The upstream project this repository is built upon ([2eno/NexAlloyNext-Patches](https://github.com/2eno/NexAlloyNext-Patches), whose consolidated history forms the base of this repository), plus the Spotify, Instagram and Google Ads runtime hook extensions
+- [NexAlloy](https://github.com/NexAlloy/NexAlloy): The original LSPosed patcher concept by ChsBuffer
+- [Morphe](https://morphe.software): Bytecode runtime hook patterns and extensions
+- [ReVanced](https://revanced.app): Feature specifications and research
+- [Piko](https://github.com/crimera/piko): Instagram and Twitter runtime hook logic
+- [VenusIsJaded/Venus-Patches](https://github.com/VenusIsJaded/Venus-Patches): Discord native privacy target tables and "Use your phone's font" (a092devs bundle)
+- [heyymichii/michii-patches](https://github.com/heyymichii/michii-patches): LinkedIn share-link, open-links and tracking patches (a092devs bundle)
+- [ak800i/mixplorer-patches-for-morphe](https://github.com/ak800i/mixplorer-patches-for-morphe): MiXplorer scoped-storage file sharing fix (a092devs bundle)
+- [jkennethcarino/adobo](https://github.com/jkennethcarino/adobo): Reddit screenshot-banner, link, refresh, redirect, navigation-bar and score/view-count ports (a092devs bundle)
+- [morphe-patches.software](https://morphe-patches.software): Community patch catalog used for source discovery
+
+**Attribution policy:** ports and adaptations record the upstream repository URL and keep the
+original license notices. Code derived from Morphe, ReVanced, Piko, 2eno, or other GPL-3.0
+projects remains GPL-3.0 (see [LICENSE](LICENSE)).

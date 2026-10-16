@@ -29,7 +29,7 @@ internal val experimentFlagUtilFingerprint = findClassDirect {
                 params, listOf("J", "[B")
             )
         }
-    }.map { it.declaredClass }.distinct().single()!!
+    }.map { it.declaredClass }.distinct().firstOrNull()!!
 }
 
 @SuppressLint("NonUniqueDexKitData")

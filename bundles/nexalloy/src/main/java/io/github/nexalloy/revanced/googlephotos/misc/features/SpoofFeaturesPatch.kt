@@ -60,8 +60,12 @@ val SpoofFeaturesPatch = patch(
         }
     }
 
-    DexMethod("Landroid/app/ApplicationPackageManager;->hasSystemFeature(Ljava/lang/String;)Z")
-        .hookMethod(hook)
-    DexMethod("Landroid/app/ApplicationPackageManager;->hasSystemFeature(Ljava/lang/String;I)Z")
-        .hookMethod(hook)
+    runCatching {
+        DexMethod("Landroid/app/ApplicationPackageManager;->hasSystemFeature(Ljava/lang/String;)Z")
+            .hookMethod(hook)
+    }
+    runCatching {
+        DexMethod("Landroid/app/ApplicationPackageManager;->hasSystemFeature(Ljava/lang/String;I)Z")
+            .hookMethod(hook)
+    }
 }

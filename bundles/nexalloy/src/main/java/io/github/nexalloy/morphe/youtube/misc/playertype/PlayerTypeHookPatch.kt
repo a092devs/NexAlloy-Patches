@@ -3,13 +3,17 @@ package io.github.nexalloy.morphe.youtube.misc.playertype
 import android.annotation.SuppressLint
 import android.view.View
 import app.morphe.extension.youtube.patches.PlayerTypeHookPatch
+import io.github.nexalloy.morphe.youtube.misc.playservice.VersionCheck
+import io.github.nexalloy.morphe.youtube.misc.playservice.is_21_41_or_greater
 import io.github.nexalloy.patch
 
 @SuppressLint("NonUniqueDexKitData")
 val PlayerTypeHook = patch(
     description = "Hook to get the current player type and video playback state.",
 ) {
-    PlayerTypeFingerprint.hookMethod {
+    dependsOn(VersionCheck)
+
+    (if (is_21_41_or_greater) ::PlayerTypeFingerprint else ::PlayerTypeFingerprintLegacy).hookMethod {
         before { param ->
             PlayerTypeHookPatch.setPlayerType(param.args[0] as Enum<*>)
         }

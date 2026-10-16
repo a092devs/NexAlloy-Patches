@@ -9,10 +9,10 @@ import app.twoeno.extension.spotify.HidePlayerAdsPatch
 import app.twoeno.extension.spotify.MuteAudioAdsPatch
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
+import io.github.nexalloy.PatcherLog
 import io.github.nexalloy.hookMethod
 import io.github.nexalloy.patch
 import io.github.nexalloy.`2eno`.spotify.browseSectionsGetters
-import io.github.nexalloy.`2eno`.spotify.casitaHomeSectionsGetters
 import io.github.nexalloy.`2eno`.spotify.contextMenuViewModelClass
 import io.github.nexalloy.`2eno`.spotify.embeddedAdPlaylistPropertiesConstructor
 import io.github.nexalloy.`2eno`.spotify.homeSectionsGetters
@@ -37,7 +37,7 @@ val HideAdSections = patch(
     name = "Hide ad sections",
     description = "Removes brand ad sections from the home and search page.",
 ) {
-    val homeGetters = ::casitaHomeSectionsGetters.dexMethodList + ::homeSectionsGetters.dexMethodList
+    val homeGetters = ::homeSectionsGetters.dexMethodList
     val browseGetters = ::browseSectionsGetters.dexMethodList
     if (homeGetters.isEmpty() && browseGetters.isEmpty()) throw Exception("Page sections not found")
 
@@ -57,7 +57,12 @@ val HideContextMenuUpsells = patch(
     name = "Hide context menu upsells",
     description = "Removes \"Premium\" entries from the context menus of songs, albums and playlists.",
 ) {
-    val isPremiumUpsell = ::premiumUpsellField.field.apply { isAccessible = true }
+    val isPremiumUpsell = runCatching { ::premiumUpsellField.field }.getOrNull()
+    if (isPremiumUpsell == null) {
+        PatcherLog.info { "The context menu item view model was not found, skipping the premium upsell removal" }
+        return@patch
+    }
+    isPremiumUpsell.isAccessible = true
 
     XposedBridge.hookAllConstructors(::contextMenuViewModelClass.clazz, object : XC_MethodHook() {
         override fun beforeHookedMethod(param: MethodHookParam) {
@@ -95,10 +100,10 @@ val HidePlaylistAds = patch(
 ) {
     ::embeddedAdPlaylistPropertiesConstructor.hookMethod {
         before { param ->
-            // The first two parameters are the ad placement enums.
+            // Every ad placement parameter is an enum with a NONE constant.
             val parameterTypes = (param.method as Constructor<*>).parameterTypes
-            for (index in 0..1) {
-                HidePlayerAdsPatch.noneOf(parameterTypes[index])?.let { param.args[index] = it }
+            parameterTypes.forEachIndexed { index, type ->
+                HidePlayerAdsPatch.noneOf(type)?.let { param.args[index] = it }
             }
         }
     }

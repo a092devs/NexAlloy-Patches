@@ -21,7 +21,7 @@ import app.morphe.extension.youtube.sponsorblock.ui.SponsorBlockStatsPreferenceC
 import app.morphe.extension.youtube.sponsorblock.ui.SponsorBlockViewController
 import app.morphe.extension.youtube.sponsorblock.ui.VotingButton
 import io.github.nexalloy.patches.R
-import io.github.nexalloy.morphe.music.misc.playservice.versionCheckPatch
+import io.github.nexalloy.morphe.youtube.misc.playservice.VersionCheck
 import io.github.nexalloy.morphe.shared.misc.settings.preference.BasePreference
 import io.github.nexalloy.morphe.shared.misc.settings.preference.InputType
 import io.github.nexalloy.morphe.shared.misc.settings.preference.ListPreference
@@ -60,7 +60,7 @@ val SponsorBlock = patch(
         VideoId,
         PlayerTypeHook,
         LegacyPlayerControls,
-        versionCheckPatch
+        VersionCheck
     )
 
     PreferenceScreen.SPONSORBLOCK.addPreferences(

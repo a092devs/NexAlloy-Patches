@@ -1,5 +1,6 @@
 package io.github.nexalloy.`2eno`.spotify
 
+import io.github.nexalloy.SkipTest
 import io.github.nexalloy.morphe.AccessFlags
 import io.github.nexalloy.morphe.Opcode
 import io.github.nexalloy.morphe.fingerprint
@@ -9,6 +10,7 @@ import io.github.nexalloy.morphe.findMethodDirect
 import io.github.nexalloy.morphe.findMethodListDirect
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.query.enums.StringMatchType
+import org.luckypray.dexkit.result.MethodData
 
 // region Ads
 
@@ -26,7 +28,11 @@ val contextMenuViewModelClass = findClassDirect {
 
 /**
  * The context menu item view model is `ViewModel(available, enabled, isPremiumUpsell, ...)`.
+ *
+ * Newer app versions no longer return the view model from a `getViewModel` method, so the
+ * premium upsell filter skips itself when this field cannot be found.
  */
+@get:SkipTest
 val premiumUpsellField = findFieldDirect {
     val viewModelClass = findMethod {
         findFirst = true
@@ -35,20 +41,27 @@ val premiumUpsellField = findFieldDirect {
     viewModelClass.fields.filter { it.typeName == "boolean" }[1]
 }
 
-private fun DexKitBridge.sectionsGetters(structureClass: String) = findClass {
-    matcher { className(structureClass, StringMatchType.EndsWith) }
-}.findMethod {
-    matcher {
-        returnType = "java.util.List"
-        addUsingField { name("sections_") }
+private fun DexKitBridge.sectionsGetters(structureClass: String): List<MethodData> {
+    val classes = findClass {
+        matcher { className(structureClass, StringMatchType.EndsWith) }
     }
+    if (classes.isEmpty()) return emptyList()
+    // The list is stored in the `sections_` protobuf field and read by its getter.
+    return findMethod {
+        searchInClass(classes)
+        matcher { addUsingField { name("sections_") } }
+    }.filterNot { it.isConstructor }
 }
 
-val casitaHomeSectionsGetters = findMethodListDirect { sectionsGetters("casita.v1.resolved.HomeStructure") }
+/** Getters of the sections list of the home page model. */
+val homeSectionsGetters = findMethodListDirect {
+    sectionsGetters("casita.v1.resolved.HomeStructure") + sectionsGetters("homeapi.proto.HomeStructure")
+}
 
-val homeSectionsGetters = findMethodListDirect { sectionsGetters("homeapi.proto.HomeStructure") }
-
-val browseSectionsGetters = findMethodListDirect { sectionsGetters("browsita.v1.resolved.BrowseStructure") }
+/** Getter of the sections list of the browse (search page) model. */
+val browseSectionsGetters = findMethodListDirect {
+    sectionsGetters("browsita.v1.resolved.BrowseStructure")
+}
 
 private fun DexKitBridge.pendragonRequests(requestClass: String) = findMethod {
     matcher {
@@ -67,9 +80,9 @@ val pendragonRequestMethods = findMethodListDirect {
 val embeddedAdPlaylistPropertiesConstructor = findMethodDirect {
     findClass {
         matcher { usingStrings("android-embeddedadplaylist", "embedded_ad_placement") }
-    }.single().findMethod {
-        matcher { name = "<init>" }
-    }.single { it.paramCount > 2 }
+    }.flatMap { classes ->
+        classes.methods.filter { it.isConstructor && it.paramCount > 2 }
+    }.single()
 }
 
 /**
@@ -122,6 +135,13 @@ val navigationTabSetConstructor = findMethodDirect {
 
 // region Misc
 
+/**
+ * The method that verifies whether the caller may bind app widgets.
+ *
+ * Newer app versions no longer check the `BIND_APPWIDGET` permission in the app, so the
+ * widget fix skips itself when this cannot be found.
+ */
+@get:SkipTest
 val canBindAppWidgetPermissionMethod = findMethodDirect {
     runCatching {
         fingerprint {
@@ -162,14 +182,19 @@ val shareCopyUrlMethod = findMethodDirect {
 
 val formatAndroidShareSheetUrlMethod = findMethodDirect {
     runCatching {
-        fingerprint {
-            accessFlags(AccessFlags.PUBLIC, AccessFlags.STATIC)
-            returns("Ljava/lang/String;")
-            parameters("L", "Ljava/lang/String;")
-            methodMatcher {
+        // The share intent builder formats the message with `(share data, url) -> String`.
+        findMethod {
+            matcher {
+                accessFlags(0x9) // public static
+                returnType = "java.lang.String"
+                paramTypes(listOf(null, "java.lang.String"))
                 addCaller { usingStrings("android.intent.extra.TEXT", "text/plain") }
             }
-        }
+        }.filter { method ->
+            // `(L, String)` means a reference first parameter, so drop primitive overloads
+            // such as resource string getters `(int, String)`.
+            method.paramTypeNames.firstOrNull()?.contains('.') == true
+        }.single()
     }.recoverCatching {
         fingerprint {
             accessFlags(AccessFlags.PUBLIC, AccessFlags.STATIC)

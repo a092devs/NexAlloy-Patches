@@ -79,6 +79,8 @@ var is_21_20_or_greater : Boolean by Delegates.notNull()
     private set
 var is_21_21_or_greater : Boolean by Delegates.notNull()
     private set
+var is_21_23_or_greater : Boolean by Delegates.notNull()
+    private set
 var is_21_25_or_greater : Boolean by Delegates.notNull()
     private set
 var is_21_26_or_greater : Boolean by Delegates.notNull()
@@ -101,12 +103,14 @@ var is_21_36_or_greater : Boolean by Delegates.notNull()
     private set
 var is_21_39_or_greater : Boolean by Delegates.notNull()
     private set
+var is_21_41_or_greater : Boolean by Delegates.notNull()
+    private set
 
 val VersionCheck = patch {
     val versionName = appContext.packageManager
         .getPackageInfo(appContext.packageName, 0).versionName!!
 
-    fun isEqualsOrGreaterThan(version: String) = versionName >= version
+    fun isEqualsOrGreaterThan(version: String) = io.github.nexalloy.patches.isVersionAtLeast(versionName, version)
 
     is_20_22_or_greater = isEqualsOrGreaterThan("20.22.00")
     is_20_26_or_greater = isEqualsOrGreaterThan("20.26.00")
@@ -144,6 +148,7 @@ val VersionCheck = patch {
     is_21_19_or_greater = isEqualsOrGreaterThan("21.19.000")
     is_21_20_or_greater = isEqualsOrGreaterThan("21.20.000")
     is_21_21_or_greater = isEqualsOrGreaterThan("21.21.00")
+    is_21_23_or_greater = isEqualsOrGreaterThan("21.23.000")
     is_21_25_or_greater = isEqualsOrGreaterThan("21.25.000")
     is_21_26_or_greater = isEqualsOrGreaterThan("21.26.000")
     is_21_28_or_greater = isEqualsOrGreaterThan("21.28.000")
@@ -155,4 +160,5 @@ val VersionCheck = patch {
     is_21_35_or_greater = isEqualsOrGreaterThan("21.35.000")
     is_21_36_or_greater = isEqualsOrGreaterThan("21.36.00")
     is_21_39_or_greater = isEqualsOrGreaterThan("21.39.000")
+    is_21_41_or_greater = isEqualsOrGreaterThan("21.41.000")
 }

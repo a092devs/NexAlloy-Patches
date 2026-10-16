@@ -19,7 +19,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven(url = "https://api.xposed.info")
-        // The NexAlloy patcher API, published by https://github.com/2eno/NexAlloyNext.
+        // The NexAlloy patcher API, published by https://github.com/a092devs/NexAlloyNext.
         maven(url = providers.gradleProperty("nexalloyMaven").get())
     }
 }
@@ -39,3 +39,4 @@ include(":stub")
 include(":bundles:nexalloy")
 include(":bundles:2eno")
 include(":bundles:piko")
+include(":bundles:a092devs")

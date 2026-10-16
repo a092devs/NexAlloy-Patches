@@ -1,35 +1,101 @@
 name: Android CI
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-  workflow_dispatch:
+    push:
+        branches: ['main']
+    pull_request:
+    workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+    build:
+        runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: true
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  submodules: recursive
 
-    - name: set up JDK
-      uses: actions/setup-java@v5
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: gradle
+            - name: Set up JDK
+              uses: actions/setup-java@v5
+              with:
+                  java-version: '21'
+                  distribution: 'temurin'
+                  cache: gradle
 
-    - name: Unit tests
-      run: ./gradlew testDebugUnitTest
+            - name: Set up Android SDK
+              uses: android-actions/setup-android@v4
+              with:
+                  packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
-    - name: Build patch bundles
-      run: ./gradlew assembleBundle
+            - name: Unit tests
+              run: ./gradlew testDebugUnitTest
 
-    - name: Upload patch bundles
-      uses: actions/upload-artifact@v7
-      with:
-        name: nexalloy-ci-bundles
-        path: bundles/*/build/outputs/bundle/*.nxb
+            - name: Build patch bundles
+              run: ./gradlew assembleBundle
+
+            - name: Verify generated bundles
+              shell: bash
+              run: |
+                  shopt -s nullglob
+                  files=(bundles/*/build/outputs/bundle/*.nxb)
+
+                  if (( ${#files[@]} == 0 )); then
+                    echo "::error::No .nxb patch bundles were generated!"
+                    exit 1
+                  fi
+
+                  for f in "${files[@]}"; do
+                    if [[ ! -s "$f" ]]; then
+                      echo "::error::Bundle artifact $f is empty!"
+                      exit 1
+                    fi
+
+                    echo "Verified: $f ($(stat -c%s "$f") bytes)"
+                  done
+
+            - name: Upload patch bundles
+              uses: actions/upload-artifact@v7
+              with:
+                  name: nexalloy-ci-bundles
+                  path: bundles/*/build/outputs/bundle/*.nxb
+
+    auto-release:
+        name: Auto release
+        needs: build
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+
+        permissions:
+            contents: write
+            actions: write
+
+        concurrency:
+            group: auto-release
+            cancel-in-progress: false
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Dispatch release workflow for the changelog version
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  set -euo pipefail
+
+                  VERSION=$(grep -m1 -oP '^##\s+\K[0-9]+\.[0-9]+\.[0-9]+$' CHANGELOG.md || true)
+
+                  if [[ -z "$VERSION" ]]; then
+                    echo "::error::CHANGELOG.md has no 'X.Y.Z' section to release; add one before pushing."
+                    exit 1
+                  fi
+
+                  echo "Resolved release version: $VERSION"
+
+                  if gh release view "$VERSION" >/dev/null 2>&1; then
+                    echo "Release $VERSION already exists; nothing to release."
+                    exit 0
+                  fi
+
+                  gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f tag="$VERSION"
+                  echo "Dispatched the release workflow for $VERSION."

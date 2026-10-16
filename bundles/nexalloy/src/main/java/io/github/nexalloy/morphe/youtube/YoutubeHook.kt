@@ -18,8 +18,12 @@ import io.github.nexalloy.morphe.youtube.layout.buttons.action.HideVideoActionBu
 import io.github.nexalloy.morphe.youtube.layout.buttons.navigation.NavigationBar
 import io.github.nexalloy.morphe.youtube.layout.captions.AutoCaptions
 import io.github.nexalloy.morphe.youtube.layout.dearrow.deArrowPatch
+import io.github.nexalloy.morphe.youtube.layout.hide.ambientmode.AmbientMode
 import io.github.nexalloy.morphe.youtube.layout.hide.general.HideLayoutComponents
 import io.github.nexalloy.morphe.youtube.layout.hide.shorts.HideShortsComponents
+import io.github.nexalloy.morphe.youtube.layout.miniplayer.Miniplayer
+import io.github.nexalloy.morphe.youtube.layout.player.pip.PipSeekButtons
+import io.github.nexalloy.morphe.youtube.layout.playlistautoplay.DisablePlaylistAutoplay
 import io.github.nexalloy.morphe.youtube.layout.shortsnoresume.DisableShortsResumingOnStartup
 import io.github.nexalloy.morphe.youtube.layout.sponsorblock.SponsorBlock
 import io.github.nexalloy.morphe.youtube.layout.startpage.changeStartPagePatch
@@ -28,22 +32,44 @@ import io.github.nexalloy.morphe.youtube.misc.backgroundplayback.BackgroundPlayb
 import io.github.nexalloy.morphe.youtube.misc.debugging.EnableDebugging
 import io.github.nexalloy.morphe.youtube.misc.privacy.SanitizeSharingLinks
 import io.github.nexalloy.morphe.youtube.misc.settings.SettingsHook
+import io.github.nexalloy.morphe.youtube.misc.verticalscroll.FixVerticalScroll
 import io.github.nexalloy.morphe.youtube.shared.YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE
+import io.github.nexalloy.morphe.youtube.shared.mainActivityClass
 import io.github.nexalloy.morphe.youtube.video.audio.ForceOriginalAudio
 import io.github.nexalloy.morphe.youtube.video.codecs.DisableVideoCodecs
 import io.github.nexalloy.morphe.youtube.video.quality.VideoQuality
+import io.github.nexalloy.morphe.youtube.misc.playservice.VersionCheck
 import io.github.nexalloy.morphe.youtube.video.speed.PlaybackSpeed
 import io.github.nexalloy.patch
 import org.luckypray.dexkit.wrap.DexMethod
 
 val ExtensionHook = patch(name = "<ExtensionHook>") {
+    dependsOn(VersionCheck)
     injectHostClassLoaderToSelf(bundle.classLoader, classLoader)
     injectSelfClassLoaderToHost(bundle.classLoader, classLoader)
-    DexMethod("$YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE->onCreate(Landroid/os/Bundle;)V").hookMethod {
-        before {
-            val mainActivity = it.thisObject as Activity
-            mainActivity.addModuleAssets()
-            Utils.setContext(mainActivity)
+    val hooked = runCatching {
+        DexMethod("$YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE->onCreate(Landroid/os/Bundle;)V").hookMethod {
+            before {
+                val mainActivity = it.thisObject as Activity
+                mainActivity.addModuleAssets()
+                Utils.setContext(mainActivity)
+            }
+        }
+    }.isSuccess
+    if (!hooked) {
+        runCatching {
+            val targetClass = runCatching { classLoader.loadClass("com.google.android.apps.youtube.app.watchwhile.MainActivity") }
+                .getOrNull() ?: ::mainActivityClass.clazz
+            de.robv.android.xposed.XposedHelpers.findAndHookMethod(
+                targetClass, "onCreate", android.os.Bundle::class.java,
+                object : de.robv.android.xposed.XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val mainActivity = param.thisObject as Activity
+                        mainActivity.addModuleAssets()
+                        Utils.setContext(mainActivity)
+                    }
+                }
+            )
         }
     }
 
@@ -61,13 +87,17 @@ fun insertLiteralOverride(id: Long, override: (Boolean) -> Boolean) {
 }
 
 val FeatureOverride = patch {
-    ::experimentalBooleanFeatureFlagFingerprint.hookMethod {
-        priority = XposedInterface.PRIORITY_DEFAULT - 1
-        after {
-            val id = it.args.atLast(2) as Long
-            val orig = it.result as Boolean
-            val match = overrides[id] ?: return@after
-            it.result = match(orig)
+    runCatching {
+        ::experimentalBooleanFeatureFlagFingerprint.hookMethod {
+            priority = XposedInterface.PRIORITY_DEFAULT - 1
+            after {
+                val args = it.args ?: return@after
+                if (args.size < 2) return@after
+                val id = (args[args.size - 2] as? Long) ?: return@after
+                val orig = (it.result as? Boolean) ?: return@after
+                val match = overrides[id] ?: return@after
+                it.result = match(orig)
+            }
         }
     }
 }
@@ -94,8 +124,13 @@ val YouTubePatches = arrayOf(
     DisableVideoCodecs,
     deArrowPatch,
     BypassImageRegionRestrictionsPatch,
+    AmbientMode,
+    Miniplayer,
+    PipSeekButtons,
+    DisablePlaylistAutoplay,
     CheckRecycleBitmapMediaSession,
     changeStartPagePatch,
+    FixVerticalScroll,
     // make sure settingsHook at end to build preferences
     SettingsHook,
     FeatureOverride

@@ -2,18 +2,19 @@ package io.github.nexalloy.morphe.youtube.misc.backgroundplayback
 
 import io.github.nexalloy.morphe.AccessFlags
 import io.github.nexalloy.morphe.Fingerprint
+import io.github.nexalloy.morphe.InstructionLocation.MatchAfterWithin
 import io.github.nexalloy.morphe.Opcode
 import io.github.nexalloy.morphe.OpcodesFilter
+import io.github.nexalloy.morphe.ResourceType
 import io.github.nexalloy.morphe.accessFlags
 import io.github.nexalloy.morphe.findMethodDirect
 import io.github.nexalloy.morphe.findMethodListDirect
-import io.github.nexalloy.morphe.fingerprint
 import io.github.nexalloy.morphe.literal
+import io.github.nexalloy.morphe.methodCall
 import io.github.nexalloy.morphe.parameters
-import io.github.nexalloy.morphe.resourceMappings
+import io.github.nexalloy.morphe.resourceLiteral
 import io.github.nexalloy.morphe.returns
-
-val prefBackgroundAndOfflineCategoryId get() = resourceMappings["string", "pref_background_and_offline_category"]
+import io.github.nexalloy.morphe.youtube.misc.playservice.is_21_23_or_greater
 
 object BackgroundPlaybackManagerFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
@@ -48,22 +49,52 @@ object BackgroundPlaybackManagerFingerprint : Fingerprint(
     )
 )
 
-val backgroundPlaybackSettingsFingerprint = fingerprint {
-    accessFlags(AccessFlags.PUBLIC, AccessFlags.FINAL)
-    returns("Ljava/lang/String;")
-    parameters()
-    opcodes(
-        Opcode.INVOKE_VIRTUAL,
-        Opcode.MOVE_RESULT,
-        Opcode.INVOKE_VIRTUAL,
-        Opcode.MOVE_RESULT,
-        Opcode.IF_EQZ,
+/**
+ * 21.23+
+ */
+object BackgroundPlaybackSettingsFingerprint : Fingerprint(
+    returnType = "Ljava/lang/Object;",
+    parameters = listOf("Ljava/lang/Object;"),
+    filters = listOf(
+        // Background playback allowed.
+        methodCall(opcode = Opcode.INVOKE_VIRTUAL, returnType = "Z", parameters = listOf()),
+        methodCall(
+            smali = "Ljava/lang/Boolean;->booleanValue()Z",
+            location = MatchAfterWithin(2)
+        ),
+        resourceLiteral(
+            ResourceType.STRING,
+            "pref_background_and_offline_category",
+            location = MatchAfterWithin(10)
+        ),
+        resourceLiteral(ResourceType.STRING, "pref_background_category")
     )
-    literal { prefBackgroundAndOfflineCategoryId }
-}
+)
+
+/**
+ * 21.22 and lower.
+ */
+object BackgroundPlaybackSettingsLegacyFingerprint : Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
+    returnType = "Ljava/lang/String;",
+    parameters = listOf(),
+    filters = listOf(
+        methodCall(returnType = "Z"),
+        // Background playback allowed.
+        methodCall(returnType = "Z"),
+        resourceLiteral(ResourceType.STRING, "pref_background_and_offline_category"),
+        resourceLiteral(ResourceType.STRING, "pref_background_category")
+    )
+)
 
 val backgroundPlaybackSettingsSubFingerprint = findMethodDirect {
-    backgroundPlaybackSettingsFingerprint().invokes.filter { it.returnTypeName == "boolean" }[1]
+    val backgroundPlaybackAllowed = if (is_21_23_or_greater) {
+        BackgroundPlaybackSettingsFingerprint.instructionMatches.first()
+    } else {
+        BackgroundPlaybackSettingsLegacyFingerprint.instructionMatches[1]
+    }
+
+    backgroundPlaybackAllowed.instruction.methodRef!!
 }
 
 object KidsBackgroundPlaybackPolicyControllerFingerprint : Fingerprint(

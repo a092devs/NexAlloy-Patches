@@ -1,8 +1,8 @@
 # Development Guide
 
-This repository holds the patch bundles of [NexAlloyNext](https://github.com/2eno/NexAlloyNext). How bundles are
+This repository holds the patch bundles of [NexAlloyNext](https://github.com/a092devs/NexAlloyNext). How bundles are
 loaded, the bundle format and the rules for bundles are described in its
-[development guide](https://github.com/2eno/NexAlloyNext/blob/main/DEVELOPMENT.md).
+[development guide](https://github.com/a092devs/NexAlloyNext/blob/main/DEVELOPMENT.md).
 
 ```text
 📦 NexAlloyNext-Patches
@@ -16,7 +16,7 @@ loaded, the bundle format and the rules for bundles are described in its
 ```
 
 The bundles compile against the patcher API `io.github.nexalloy:patcher` (version `patcher` in
-[libs.versions.toml](gradle/libs.versions.toml)), published to `https://raw.githubusercontent.com/2eno/NexAlloyNext/maven`.
+[libs.versions.toml](gradle/libs.versions.toml)), published to `https://raw.githubusercontent.com/a092devs/NexAlloyNext/maven`.
 To build against a local NexAlloyNext checkout, run `./gradlew :patcher:publishAllPublicationsToReleaseRepository`
 there and pass `-PnexalloyMaven=file:///path/to/NexAlloyNext/build/maven` here.
 

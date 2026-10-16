@@ -1,0 +1,98 @@
+a092devs NOTICE
+
+This bundle contains native Xposed hooks ported from community Morphe patch projects. Each source is
+licensed GPL-3.0, the same license as this repository (see LICENSE at the repository root). The ports
+were re-implemented against the NexAlloy runtime patcher API; the target tables and helper logic are
+transcribed from the sources below so they can be diffed against them.
+
+================================================================================
+VenusIsJaded/Venus-Patches
+https://github.com/VenusIsJaded/Venus-Patches
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/app/venus/patches/PrivacyPatches.kt — the native
+(non-Hermes) target tables for "Disable crash reporting", "Disable telemetry and touch logging",
+"Disable install attribution" and "Disable advertising identifiers" (Discord 348.10 - Stable);
+extensions/font/src/main/kotlin/app/venus/font/SystemFont.kt — the "Force system font" decision
+logic (family, weight and style mapping), installed here as a runtime hook on
+ReactFontManager.getTypeface with the manager's patch toggle in place of Venus's saved setting.
+Not ported: patch-time additions, the `assets/index.android.bundle` (Hermes bytecode) edits, and
+the mid-session restart dispatch.
+================================================================================
+heyymichii/michii-patches
+https://github.com/heyymichii/michii-patches
+License: GPL-3.0
+Ported material: "Sanitize share links" (LinkCleaner.java, ShareLinkPatch.java),
+"Open links directly" (OpenLinksDirectlyPatch.java, unwrapSafetyPage only) and "Block tracking"
+(MetricQueue fingerprint) for LinkedIn; "Hide sponsored messages" and ghost mode
+(MessagingPatch.java: the entityData.contentMetadata.hasConversationAdContentValue and
+MessageItemKt.isSpInMail conversation filter, the sendTypingIndicator stub and the
+messagelist-only updateConversationReadStatus guard); "Disable double-tap like"
+(DoubleTapPatch.java); and "Hide feed ads" (HideAdsPatch.java's
+collectionTemplate.copyWithNewElements sponsoredTracking filter plus the SDUI feed-full-update
+rules of SduiComponentFilter.java: viewTracking metadata sponsoredData and the
+urn:li:sponsoredContentV2: payload marker). Not ported: the background lnkd.in short-link
+resolver, DownloadMedia/SduiMediaDownload, the in-app settings screen, and the other
+SduiComponentFilter rules (suggested, celebrations, jobs, reposts, videos, focus mode, premium
+upsells).
+================================================================================
+ak800i/mixplorer-patches-for-morphe
+https://github.com/ak800i/mixplorer-patches-for-morphe
+License: GPL-3.0
+Ported material: "Fix scoped-storage file sharing" — the FileProvider.query `_data` masking for
+external callers (Binder.getCallingUid() != Process.myUid(), Android 11+). Implemented as a
+cursor wrapper instead of a method rewrite; the behavior for callers is the same.
+================================================================================
+jkennethcarino/adobo
+https://github.com/jkennethcarino/adobo
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/dev/jkcarino/adobo/patches/reddit/ (Reddit 2026.38.0 -
+2026.14.0) — "Disable screenshot banner", "Open links directly" (outbound click tracking and
+redirect getters), "Disable home feed auto-refresh", "Disable home screen redirect",
+"Make system navigation bar transparent", "Hide upvote scores" and "Hide post view counts".
+Runtime equivalents are used where the bytecode edit cannot be expressed as a hook: the
+screenshot callback registered with Activity.registerScreenCaptureCallback is replaced with a
+no-op, the navigation-bar constants are forced on framework calls, and the score/view-count
+patches stub the getters only (the toString field rewrites are not ported).
+================================================================================
+jasonwu1994/Gboard-patches
+https://github.com/jasonwu1994/Gboard-patches
+License: GPL-3.0
+Ported material: the flag-family feature patches under
+patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/ together with the
+matching extension/<feature>/*Policy.java decision rules (free cursor trackpad, super insert,
+emoji size, access points menu redesign, Bluetooth microphone, close proactive suggestions,
+access point count, clipboard character limit, flow mode, advanced voice typing, grammar checker,
+inline suggestions and key shapes). Upstream rewrites Gboard's flag value getter so its runtime
+can substitute the result per flag name; this port hooks the same getter on Gboard 18.4.1
+(actb.g(), the name field and value box types match the upstream 18.0.3 bindings) and applies
+the same name-based overrides, with the manager's per-patch toggles in place of the in-app flag
+settings. Not ported: the features that also replace widgets, layouts, resources or GMS module
+requests (OCR module plumbing, AI writing tools backend selection, Rambler toolbar, settings
+homepage policy, split keyboard, custom layout editor, symbol picker, manual incognito and the
+other custom resources), and the accessibility-layout flag, which no longer exists in 18.4.1.
+================================================================================
+SysAdminDoc/Hushfacebook
+https://github.com/SysAdminDoc/Hushfacebook
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/app/morphe/patches/facebook/misc/screenshots/
+(AllowScreenshots and BlockScreenshotDetection for Facebook 582.0.0.50.54). Upstream rewrites
+the FLAG_SECURE writes and the screenshot observer in the APK; this port clears FLAG_SECURE on
+the Window/PhoneWindow/WindowManagerImpl calls those sites reach and no-ops
+com.facebook.screenshot.ScreenshotContentObserver.onChange plus the Android 14 screen-capture
+and Android 15 screen-recording registration callbacks. Not ported: the in-app patch settings.
+================================================================================
+Akshayykadam/PixelBoard
+https://github.com/Akshayykadam/PixelBoard
+License: GPL-3.0
+Ported material: Phenotype flag configurations and SharedPreferences hooks for Belka
+rounded keycaps, Gemini AI Writing Tools, Scan Text OCR, floating screenshot chips,
+Emoji Palette V2, Smart Compose predictions, and spellchecker suggestion chips.
+================================================================================
+Paresh-Maheshwari/paresh-patches
+https://gitlab.com/Paresh-Maheshwari/paresh-patches
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/app/paresh/patches/protonvpn/ — Proton VPN
+telemetry worker and observability collection blocking, upgrade onboarding launcher
+suppression, and NetShield UI availability unlock.
+================================================================================
+
