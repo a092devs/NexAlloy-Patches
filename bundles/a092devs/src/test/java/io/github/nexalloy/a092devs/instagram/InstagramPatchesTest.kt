@@ -17,14 +17,17 @@ class InstagramPatchesTest {
         assertEquals(Rule.ANALYTICS, rule("https://graph.instagram.com/logging_client_events"))
         assertEquals(Rule.STORY_SEEN, rule("https://i.instagram.com/api/v2/media/seen/?reel=1"))
         assertEquals(Rule.LIVE_VIEWER, rule("https://i.instagram.com/api/v1/live/123/heartbeat_and_get_viewer_count/"))
-        assertEquals(Rule.ADS, rule("https://i.instagram.com/api/v1/feed/injected_reels_media/"))
+        assertEquals(Rule.REELS_ADS, rule("https://i.instagram.com/api/v1/feed/injected_reels_media/"))
         assertEquals(Rule.ADS, rule("https://i.instagram.com/api/v1/async_ads/"))
         assertEquals(Rule.SUGGESTED, rule("https://i.instagram.com/api/v1/discover/chaining/"))
         assertNull(rule("https://i.instagram.com/api/v1/feed/timeline/"))
 
         val adsUri = URI("https://i.instagram.com/api/v1/async_ads/")
+        val reelsAdsUri = URI("https://i.instagram.com/api/v1/feed/injected_reels_media/")
         InstagramRequestFilter.enable(Rule.ADS)
+        InstagramRequestFilter.enable(Rule.REELS_ADS)
         assertTrue(InstagramRequestFilter.shouldBlock(adsUri))
+        assertTrue(InstagramRequestFilter.shouldBlock(reelsAdsUri))
         assertFalse(InstagramRequestFilter.shouldBlock(URI("https://i.instagram.com/api/v1/feed/timeline/")))
     }
 

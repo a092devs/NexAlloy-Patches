@@ -44,8 +44,9 @@ object InstagramRequestFilter {
 
             path.contains("/heartbeat_and_get_viewer_count/") -> Rule.LIVE_VIEWER
 
-            path.contains("/feed/injected_reels_media/") ||
-                path.contains("/async_ads/") ||
+            path.contains("/feed/injected_reels_media/") -> Rule.REELS_ADS
+
+            path.contains("/async_ads/") ||
                 path.contains("/api/v1/ads/graphql/") ||
                 path.contains("profile_ads/get_profile_ads/") -> Rule.ADS
 

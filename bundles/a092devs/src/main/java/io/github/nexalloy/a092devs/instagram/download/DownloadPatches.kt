@@ -31,7 +31,10 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
 import java.util.Collections
+import java.util.Date
+import java.util.Locale
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 
@@ -42,7 +45,6 @@ import java.util.concurrent.ConcurrentHashMap
 // the unit test JVM can load this file); the menus, the media reading and the saving are unchanged.
 
 private const val DOWNLOAD_OPTION = "NEXALLOY_DOWNLOAD"
-private const val DOWNLOAD_FOLDER = "Instagram"
 private const val DOWNLOAD_LABEL = "Download options"
 private const val PROFILE_PICTURE_LABEL = "Download"
 private const val HIGHLIGHT_COVER_LABEL = "Download highlight cover"
@@ -93,23 +95,35 @@ private fun toast(context: Context, text: String) = Toast.makeText(context, text
 private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
 /**
- * The file name of [item], the last path segment of its URL or a new name.
+ * The file name of [item], the last path segment of its URL or a new name, with the time of the save added when
+ * [DownloadSettings.timestamp] is on.
  */
-private fun fileName(item: MediaExtractor.Item): String {
+private fun fileName(item: MediaExtractor.Item, timestamp: Boolean): String {
     val extension = if (item.isVideo) ".mp4" else ".jpg"
     val name = Uri.parse(item.url).lastPathSegment?.takeIf { it.contains('.') }
         ?: "instagram_${System.currentTimeMillis()}$extension"
+    val dated = name.withTimestamp(timestamp)
     // A cover image keeps the name of its video file otherwise.
-    return if (!item.isVideo && !name.endsWith(".jpg") && !name.endsWith(".webp") && !name.endsWith(".heic")) "$name.jpg"
-    else name
+    return if (!item.isVideo && !dated.endsWith(".jpg") && !dated.endsWith(".webp") && !dated.endsWith(".heic")) "$dated.jpg"
+    else dated
 }
 
 /**
- * Saves the file of [item] to Download/Instagram. Like Piko, the file is fetched by the app itself, as not every
- * device has the download manager.
+ * [name] with the time of the save before its extension: `clip.mp4` becomes `clip_20261017_143005.mp4`.
  */
-private fun save(context: Context, item: MediaExtractor.Item) {
-    val name = fileName(item)
+private fun String.withTimestamp(timestamp: Boolean): String {
+    if (!timestamp) return this
+    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val dot = lastIndexOf('.')
+    return if (dot > 0) "${substring(0, dot)}_$stamp${substring(dot)}" else "${this}_$stamp"
+}
+
+/**
+ * Saves the file of [item] to the folder [settings] names, for [username]. Like Piko, the file is fetched by the app
+ * itself, as not every device has the download manager.
+ */
+private fun save(context: Context, item: MediaExtractor.Item, settings: DownloadSettings, username: String?) {
+    val name = fileName(item, settings.timestamp)
     val mimeType = if (item.isVideo) "video/mp4" else if (name.endsWith(".webp")) "image/webp" else "image/jpeg"
     val connection = URL(item.url).openConnection() as HttpURLConnection
     try {
@@ -122,10 +136,10 @@ private fun save(context: Context, item: MediaExtractor.Item) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                     put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_FOLDER")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "${settings.baseDirectory(item.isVideo)}/${settings.folder(username)}")
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                val uri = resolver.insert(settings.collection(item.isVideo), values)
                     ?: throw IOException("MediaStore did not create $name")
                 try {
                     resolver.openOutputStream(uri)!!.use { output -> input.copyTo(output) }
@@ -136,7 +150,8 @@ private fun save(context: Context, item: MediaExtractor.Item) {
                 }
             } else {
                 @Suppress("DEPRECATION")
-                val folder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), DOWNLOAD_FOLDER)
+                val base = Environment.getExternalStoragePublicDirectory(settings.baseDirectory(item.isVideo))
+                val folder = File(base, settings.folder(username))
                 folder.mkdirs()
                 File(folder, name).outputStream().use { output -> input.copyTo(output) }
             }
@@ -144,26 +159,32 @@ private fun save(context: Context, item: MediaExtractor.Item) {
     } finally {
         connection.disconnect()
     }
-    log("saved $name")
+    log("saved $name to ${settings.destination(username, item.isVideo)}")
 }
 
-private fun enqueue(context: Context, items: List<MediaExtractor.Item>) {
+/**
+ * Saves [items] of [username] one by one on a worker thread, the settings read once for the whole batch, and toasts
+ * where they landed.
+ */
+private fun enqueue(context: Context, items: List<MediaExtractor.Item>, username: String? = null) {
     val appContext = context.applicationContext ?: context
+    val settings = DownloadSettings.open(appContext)
     toast(context, if (items.size == 1) "Downloading" else "Downloading ${items.size} items")
     Thread {
         var saved = 0
         items.forEach { item ->
             try {
-                save(appContext, item)
+                save(appContext, item, settings, username)
                 saved++
             } catch (e: Exception) {
                 log("failed to save ${item.url}: ${e.stackTraceToString().take(1500)}")
             }
         }
+        val destination = settings.destination(username, items.first().isVideo)
         val text = when {
-            saved == items.size -> "Saved to Download/$DOWNLOAD_FOLDER"
+            saved == items.size -> "Saved to $destination"
             saved == 0 -> "Download failed"
-            else -> "Saved $saved of ${items.size} to Download/$DOWNLOAD_FOLDER"
+            else -> "Saved $saved of ${items.size} to $destination"
         }
         mainHandler.post { toast(appContext, text) }
     }.apply { name = "NexAlloy download" }.start()
@@ -199,14 +220,19 @@ private fun showVariants(
     title: String,
     variants: List<MediaExtractor.Variant>,
     isVideo: Boolean,
+    username: String?,
 ) = dialog.show(activity, title, variants.map { variant ->
     variant.label to {
-        enqueue(activity, listOf(MediaExtractor.Item(variant.url, isVideo, imageUrl = variant.url.takeIf { !isVideo })))
+        enqueue(
+            activity,
+            listOf(MediaExtractor.Item(variant.url, isVideo, imageUrl = variant.url.takeIf { !isVideo })),
+            username,
+        )
     }
 })
 
 /**
- * Shows Piko's download options for the item at [position], the item of a carousel on screen.
+ * Shows Piko's download options for the item at [position], the item of a carousel on screen, of [username].
  */
 private fun download(
     dialog: InstagramDialog,
@@ -214,31 +240,63 @@ private fun download(
     items: List<MediaExtractor.Item>,
     position: Int,
     extraOptions: List<Pair<String, () -> Unit>>,
+    username: String?,
 ) {
     if (items.isEmpty()) return toast(activity, "No media found")
     val current = items[position.takeIf { it in items.indices } ?: 0]
     val options = mutableListOf<Pair<String, () -> Unit>>()
-    options += "Download current media" to { enqueue(activity, listOf(current)) }
-    asImage(current)?.let { image -> options += "Download as image" to { enqueue(activity, listOf(image)) } }
+    options += "Download current media" to { enqueue(activity, listOf(current), username) }
+    asImage(current)?.let { image -> options += "Download as image" to { enqueue(activity, listOf(image), username) } }
     options += "Copy media link" to { copyLink(activity, current.url) }
     if (current.imageVariants.isNotEmpty()) {
         options += "Image variants" to {
-            showVariants(dialog, activity, "Image variants", current.imageVariants, isVideo = false)
+            showVariants(dialog, activity, "Image variants", current.imageVariants, isVideo = false, username)
         }
     }
     if (current.isVideo) {
         if (current.videoVariants.isNotEmpty()) {
             options += "Video variants" to {
-                showVariants(dialog, activity, "Video variants", current.videoVariants, isVideo = true)
+                showVariants(dialog, activity, "Video variants", current.videoVariants, isVideo = true, username)
             }
         }
         options += "Open video externally" to { openExternally(activity, current.url, isVideo = true) }
     } else {
         options += "Open image externally" to { openExternally(activity, current.url, isVideo = false) }
     }
-    if (items.size > 1) options += "Download all" to { enqueue(activity, items) }
+    if (items.size > 1) options += "Download all" to { enqueue(activity, items, username) }
     options += extraOptions
+    options += "Download settings" to { showDownloadSettings(dialog, activity) }
     dialog.show(activity, "Download options", options)
+}
+
+/**
+ * The download settings: where saves land, per-username folders and timestamp names. Each row shows its current
+ * state; a tap flips it, says so and shows the menu again with the new state, so the change is visible at once.
+ */
+private fun showDownloadSettings(dialog: InstagramDialog, activity: Activity) {
+    val settings = DownloadSettings.open(activity)
+    fun onOff(value: Boolean) = if (value) "On" else "Off"
+    val options = mutableListOf<Pair<String, () -> Unit>>()
+    options += "Save to: ${settings.location.label}" to {
+        settings.location = if (settings.location == DownloadSettings.Location.DOWNLOADS) {
+            DownloadSettings.Location.GALLERY
+        } else {
+            DownloadSettings.Location.DOWNLOADS
+        }
+        toast(activity, "Saves go to ${settings.location.label}")
+        showDownloadSettings(dialog, activity)
+    }
+    options += "Folder per username: ${onOff(settings.perUsername)}" to {
+        settings.perUsername = !settings.perUsername
+        toast(activity, "Folder per username: ${onOff(settings.perUsername)}")
+        showDownloadSettings(dialog, activity)
+    }
+    options += "Timestamp names: ${onOff(settings.timestamp)}" to {
+        settings.timestamp = !settings.timestamp
+        toast(activity, "Timestamp names: ${onOff(settings.timestamp)}")
+        showDownloadSettings(dialog, activity)
+    }
+    dialog.show(activity, "Download settings", options)
 }
 
 /**
@@ -258,7 +316,9 @@ private fun activityIn(owner: Any): Activity? {
 
 val DownloadMedia = patch(
     name = "Download media",
-    description = "Adds download options to the menus of posts, reels and stories, and to profile pictures. Files are saved to Download/Instagram.",
+    description = "Adds download options to the menus of posts, reels and stories, and to profile pictures. " +
+        "Files are saved to Download/Instagram; the download settings change the location, use per-username " +
+        "folders and timestamp names.",
 ) {
     val mediaClass = classLoader.loadClass(MEDIA_CLASS)
     fun <T> optional(name: String, find: () -> T) =
@@ -295,6 +355,19 @@ val DownloadMedia = patch(
             ?: return 0.also { log("no carousel position") }
         return field.getInt(state)
     }
+    val mediaUserGetter =
+        optional("Media user getter") { ::mediaUserGetter.method.apply { isAccessible = true } }
+    val userUsernameGetter =
+        optional("Username getter") { ::userUsernameGetter.method.apply { isAccessible = true } }
+
+    /**
+     * The username of the poster of [media], for the per-username folders. Missing getters, or a build that renamed
+     * them, leave the save to the plain folder, so the download keeps working.
+     */
+    fun usernameOf(media: Any): String? = runCatching {
+        val user = mediaUserGetter?.invoke(media)
+        if (user == null) null else userUsernameGetter?.invoke(user) as? String
+    }.onFailure { log("username not read: $it") }.getOrNull()
     val icon = appContext.resources.getIdentifier("instagram_download_outline_24", "drawable", appContext.packageName)
 
     val highlightCover = optional("Highlight cover") { HighlightCover(classLoader, ::log) }
@@ -321,8 +394,9 @@ val DownloadMedia = patch(
             }
             val items = extractor.items(media)
             val position = if (items.size > 1) position(owners) else 0
+            val username = usernameOf(media)
             log("${items.size} items, at $position")
-            download(dialog, activity, items, position, highlightCoverOptions(activity, storyOwners))
+            download(dialog, activity, items, position, highlightCoverOptions(activity, storyOwners), username)
         } catch (e: Exception) {
             PatcherLog.error(e) { "Could not download the media" }
             log("failed: ${e.stackTraceToString().take(1500)}")

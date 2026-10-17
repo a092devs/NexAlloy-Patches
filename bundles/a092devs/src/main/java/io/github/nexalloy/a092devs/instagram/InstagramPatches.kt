@@ -25,10 +25,11 @@ import java.util.Locale
  * Three kinds of mechanism are used, and only these:
  *
  * - InstagramRequestFilter hooks `TigonServiceLayer.startRequest`, the kept Instagram API entry
- *   point (2eno's Instagram finders constrain the same class by name), and answers the matched
- *   endpoints with an unreachable address. The ad, suggested, story-seen, live-viewer and
- *   analytics rules all ride on it. The endpoints each rule matches are asserted in
- *   InstagramPatchesTest.
+ *   point, and answers the matched endpoints with an unreachable address. The ad, suggested,
+ *   story-seen, live-viewer and analytics rules all ride on it. The endpoints each rule matches
+ *   are asserted in InstagramPatchesTest.
+ * - The ad injector is resolved with DexKit once per process and made to answer that nothing went
+ *   in (see InstagramAds), the one ad mechanism that never reaches a request endpoint.
  * - Framework hooks: Window flag handling, ClipData text sharing and the screen capture
  *   callbacks, none of which depend on Instagram's obfuscation.
  * - The download menu hooks restored from this repository's own Piko bundle (see
@@ -76,8 +77,10 @@ val HideAds = patch(
     description = "Hides sponsored posts, reels, stories, and feed ad units without leaving gaps.",
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.ADS)
+    InstagramRequestFilter.enable(InstagramRequestFilter.Rule.REELS_ADS)
     InstagramRequestFilter.ensureHooks(classLoader)
-    PatcherLog.info { "a092devs Instagram: ad endpoints are blocked through the Tigon filter" }
+    guardAdInjector()
+    PatcherLog.info { "a092devs Instagram: ad endpoints are blocked and the ad injector is guarded" }
 }
 
 val HideSuggestedPosts = patch(
@@ -95,6 +98,8 @@ val HideReelsAds = patch(
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.REELS_ADS)
     InstagramRequestFilter.ensureHooks(classLoader)
+    guardAdInjector()
+    PatcherLog.info { "a092devs Instagram: reels ad endpoints are blocked and the ad injector is guarded" }
 }
 
 val ViewStoriesAnonymously = patch(

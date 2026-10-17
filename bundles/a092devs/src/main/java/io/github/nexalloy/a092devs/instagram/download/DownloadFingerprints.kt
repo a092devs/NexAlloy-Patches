@@ -91,6 +91,30 @@ val mediaCarouselGetter = findMethodDirect {
     mediaGetter("carousel_media", "java.util.List")
 }
 
+internal const val USER_CLASS = "com.instagram.user.model.User"
+
+/**
+ * The getter of a value of Instagram's live tree by the key it reads: a parameterless getter of [type] returning
+ * [returnType] whose body loads the hash of the key. HushGram pins its pando getters this way and `username`
+ * needs it, as its getter holds no string, only the number. Verified on 451: `Media.A3R` reads "user" as both
+ * the key's string and its hash 3599307, and `User.A8D` reads -265713450 for "username".
+ */
+private fun DexKitBridge.pandoGetter(type: String, key: String, returnType: String) =
+    findMethod {
+        matcher {
+            declaredClass(type)
+            paramCount = 0
+            this.returnType = returnType
+            usingNumbers(key.hashCode())
+        }
+    }.single()
+
+/** The poster of a media, its `user`. */
+val mediaUserGetter = findMethodDirect { pandoGetter(MEDIA_CLASS, "user", USER_CLASS) }
+
+/** A user's `username`, for the per-username folders. */
+val userUsernameGetter = findMethodDirect { pandoGetter(USER_CLASS, "username", "java.lang.String") }
+
 /**
  * Module names of the bottom sheets showing the menu of a post: the reels menu, also used for posts shown like
  * reels, and the simplified menu of the "≡" button of posts in the home feed.
