@@ -7,8 +7,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.nexalloy.patches.a092devs"
-        versionCode = 9
-        versionName = "1.7.0"
+        versionCode = 10
+        versionName = "1.8.0"
     }
 }
 
@@ -23,12 +23,20 @@ dependencies {
     compileOnly(libs.nexalloy.patcher)
 }
 
+// Fingerprint tests run against the APKs in `binaries/`, named `<package name>…apk`.
+android.sourceSets.named("test") {
+    java.directories += "../testing/java"
+    kotlin.directories += "../testing/java"
+}
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    systemProperty("java.library.path", file("../testing/jniLibs").path)
 }
 
 dependencies {
     testImplementation(libs.nexalloy.patcher)
     testImplementation(kotlin("test-junit5"))
     testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.jadx.core)
+    testImplementation(libs.slf4j.simple)
 }

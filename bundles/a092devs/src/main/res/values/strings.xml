@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">a092devs Patches</string>
-    <string name="bundle_description">Discord, LinkedIn, MiXplorer and Reddit patches ported from community Morphe patch sources to Xposed hooks.</string>
+    <string name="bundle_description">Community ports of Morphe patch sources to Xposed hooks: Discord, Facebook, Gboard, Instagram, LinkedIn, MiXplorer, Proton VPN, Reddit, Spotify and X.</string>
 </resources>

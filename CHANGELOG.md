@@ -5,6 +5,33 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.11.0
+
+- `a092devs` 1.8.0:
+  * Instagram (`com.instagram.android` 451.0.0.53.80): `Hide ads` and `Hide reels ads` now stop the
+    ads that kept showing between reels and in stories. Instagram builds some sponsored items itself
+    and inserts them into the feed, where the request filter can never see them; both patches now
+    guard that insert (the "ad injector" Piko answers false: the method holding both
+    "cross_surface_duplicate_ad" and "Is ad pod", `LX/05gS.A02` on 451) and it reports that nothing
+    went in, so no gap is left behind.
+  * Instagram: `Hide reels ads` previously blocked nothing, as `/feed/injected_reels_media/` was
+    matched by the ADS rule which the patch never enables. The endpoint now matches the REELS_ADS
+    rule, `Hide ads` enables both rules, and the filter test pins the mapping.
+  * Instagram: the download options have settings now, reachable from the new "Download settings" row
+    of the download dialog: the save location (Download, or Pictures and Movies for the gallery), a
+    folder per username, and timestamp names (`yyyyMMdd_HHmmss`). They live in the app's own
+    preferences and are read once at the start of a download, so nothing polls and nothing reaches
+    back to the manager. The poster's username comes from the media's `user` and the user's
+    `username` getters pinned by the hash of each key (`Media.A3R` and `User.A8D` on 451); a build
+    that renames them falls back to the plain folder and downloads keep working.
+  * Spotify (`com.spotify.music`): new app entry carrying the Spotify patches merged from the `2eno`
+    bundle — ad muting and hiding (audio, sections, views, player video, playlist, popups and
+    context-menu upsells), Premium tab hiding, third-party launcher widgets fix, sharing link
+    sanitizer, Dynamic Material You theme and custom rounded corners.
+- The `2eno` bundle is merged into `a092devs` and is not published anymore; its extension code is
+  vendored in-tree (the `2eno-patches` submodule and its Dependabot updates are gone). Attribution
+  is retained in the `a092devs` NOTICE.
+
 ## 2.10.0
 
 - The `piko` bundle is removed: it carried only the X hooks for `12.19.1-release.0`, which no longer

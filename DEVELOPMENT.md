@@ -9,8 +9,7 @@ loaded, the bundle format and the rules for bundles are described in its
  ├ build-logic/    The nexalloy.bundle Gradle plugin (copy of NexAlloyNext's)
  ├ bundles/
  │  ├ nexalloy/    NexAlloy Patches: Morphe, ReVanced and hoodles patches
- │  ├ 2eno/        2eno Patches: extension code from the 2eno-patches submodule
- │  ├ a092devs/    a092devs Patches: community ports (Discord, Facebook, Gboard, Instagram, LinkedIn, MiXplorer, Proton VPN, Reddit, X)
+ │  ├ a092devs/    a092devs Patches: community ports (Discord, Facebook, Gboard, Instagram, LinkedIn, MiXplorer, Proton VPN, Reddit, Spotify, X)
  │  └ testing/     Fingerprint test harness shared by the bundles
  └ stub/           Stubs of YouTube classes used by the Morphe extensions
 ```
@@ -165,9 +164,9 @@ As per ReVanced Patcher documentation:
 > Instead of involving many abstract changes in one patch or writing entire methods or classes in a patch, you can write code in extensions.
 
 The NexAlloy Patches bundle compiles the extensions of the `morphe-patches` and `morphe-patches-library` submodules
-(NexAlloy forks), the 2eno Patches bundle those of the `2eno-patches` submodule. Fix shared 2eno logic in
-[2eno-patches](https://github.com/2eno/2eno-patches), so both the Morphe patches and the Xposed hooks get it.
-Dependabot bumps that submodule to the latest commit of its `main` branch.
+(NexAlloy forks). The a092devs Patches bundle carries the Spotify extension code of the
+[2eno-patches](https://github.com/2eno/2eno-patches) project vendored in-tree under
+`bundles/a092devs/src/main/java/app/twoeno/extension` (GPL-3.0, see the bundle's NOTICE).
 
 ## Unit Testing
 

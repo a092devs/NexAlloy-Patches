@@ -11,6 +11,7 @@ import io.github.nexalloy.a092devs.linkedin.LinkedInPatches
 import io.github.nexalloy.a092devs.mixplorer.MixplorerPatches
 import io.github.nexalloy.a092devs.protonvpn.ProtonVpnPatches
 import io.github.nexalloy.a092devs.reddit.RedditPatches
+import io.github.nexalloy.a092devs.spotify.SpotifyPatches
 import io.github.nexalloy.a092devs.twitter.TwitterPatches
 
 /** Entry point of the a092devs Patches bundle, named in its manifest. */
@@ -85,6 +86,12 @@ object A092DevsPatches : PatchBundle {
                 AppTarget("2026.14.0"),
             ),
             appIconColor = 0xFF4500,
+        ),
+        AppPatchInfo(
+            appName = "Spotify",
+            packageName = "com.spotify.music",
+            patches = SpotifyPatches,
+            appIconColor = 0x1ED760,
         ),
         AppPatchInfo(
             appName = "X",
