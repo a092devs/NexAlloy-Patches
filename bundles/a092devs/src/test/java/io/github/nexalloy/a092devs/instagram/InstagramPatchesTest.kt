@@ -1,5 +1,6 @@
 package io.github.nexalloy.a092devs.instagram
 
+import android.content.SharedPreferences
 import io.github.nexalloy.a092devs.instagram.InstagramRequestFilter.Rule
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -77,6 +78,72 @@ class InstagramPatchesTest {
         assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl(null))
         assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl(""))
         assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl("<MPD></MPD>"))
+    }
+
+    @Test
+    fun testDownloadFolderCustomization() {
+        val storage = mutableMapOf<String, Any?>()
+        val editor = object : SharedPreferences.Editor {
+            override fun putString(key: String, value: String?): SharedPreferences.Editor {
+                storage[key] = value
+                return this
+            }
+            override fun putBoolean(key: String, value: Boolean): SharedPreferences.Editor {
+                storage[key] = value
+                return this
+            }
+            override fun remove(key: String): SharedPreferences.Editor {
+                storage.remove(key)
+                return this
+            }
+            override fun clear(): SharedPreferences.Editor { storage.clear(); return this }
+            override fun commit() = true
+            override fun apply() {}
+            override fun putInt(k: String, v: Int) = this
+            override fun putLong(k: String, v: Long) = this
+            override fun putFloat(k: String, v: Float) = this
+            override fun putStringSet(k: String, v: Set<String>?) = this
+        }
+        val prefs = object : SharedPreferences {
+            override fun getAll(): Map<String, *> = storage
+            override fun getString(key: String, defValue: String?): String? = storage[key] as? String ?: defValue
+            override fun getBoolean(key: String, defValue: Boolean): Boolean = storage[key] as? Boolean ?: defValue
+            override fun edit(): SharedPreferences.Editor = editor
+            override fun getStringSet(k: String, d: Set<String>?) = d
+            override fun getInt(k: String, d: Int) = d
+            override fun getLong(k: String, d: Long) = d
+            override fun getFloat(k: String, d: Float) = d
+            override fun contains(k: String) = k in storage
+            override fun registerOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+            override fun unregisterOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+        }
+
+        val constructor = io.github.nexalloy.a092devs.instagram.download.DownloadSettings::class.java.getDeclaredConstructor(SharedPreferences::class.java)
+        constructor.isAccessible = true
+        val settings = constructor.newInstance(prefs)
+
+        // Default folder
+        assertEquals("NexAlloyNext/Instagram", settings.customFolder)
+        assertEquals("NexAlloyNext/Instagram", settings.folder(null))
+        assertEquals("NexAlloyNext/Instagram", settings.folder("alice")) // perUsername is false by default
+
+        // Enable per-username
+        settings.perUsername = true
+        assertEquals("NexAlloyNext/Instagram/alice", settings.folder("alice"))
+
+        // Set custom folder
+        settings.customFolder = "MyDownloads/IG"
+        assertEquals("MyDownloads/IG", settings.customFolder)
+        assertEquals("MyDownloads/IG/bob", settings.folder("bob"))
+
+        // Strip leading Download/ or slashes
+        settings.customFolder = "/Downloads/CustomMedia/"
+        assertEquals("CustomMedia", settings.customFolder)
+
+        // Reset to default
+        settings.customFolder = "NexAlloyNext/Instagram"
+        assertEquals("NexAlloyNext/Instagram", settings.customFolder)
+        assertFalse(prefs.contains("custom_download_folder"))
     }
 }
 

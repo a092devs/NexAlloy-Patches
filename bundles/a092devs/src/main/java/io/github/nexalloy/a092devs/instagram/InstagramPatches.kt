@@ -15,7 +15,10 @@ import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import io.github.nexalloy.PatcherLog
 import io.github.nexalloy.a092devs.instagram.download.DownloadMedia
+import io.github.nexalloy.hookMethod
+import io.github.nexalloy.morphe.findMethodDirect
 import io.github.nexalloy.patch
+import org.luckypray.dexkit.query.enums.StringMatchType
 import java.util.Locale
 
 /**
@@ -341,12 +344,94 @@ val DisableAnalytics = patch(
     InstagramRequestFilter.ensureHooks(classLoader)
 }
 
+val StopStoryAutoAdvance = patch(
+    name = "Stop story auto-advance",
+    description = "Keeps each story on screen until you tap or swipe, preventing stories from auto-advancing.",
+) {
+    val viewerClass = runCatching {
+        classLoader.loadClass("instagram.features.stories.fragment.ReelViewerFragment")
+    }.getOrNull()
+    if (viewerClass != null) {
+        var count = 0
+        for (method in viewerClass.declaredMethods) {
+            if (method.isBridge && method.returnType == Void.TYPE &&
+                method.parameterTypes.size == 1 && method.parameterTypes[0] == Any::class.java
+            ) {
+                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.result = null
+                    }
+                })
+                count++
+            }
+        }
+        PatcherLog.info { "a092devs Instagram: Stop story auto-advance installed ($count listeners)" }
+    } else {
+        PatcherLog.info { "a092devs Instagram: ReelViewerFragment not found for auto-advance hook" }
+    }
+}
+
+internal val typingStatusMethod = findMethodDirect {
+    findMethod {
+        matcher {
+            usingStrings(listOf("IGDirectTypingStatusService", "is_typing_indicator_enabled"), StringMatchType.Contains)
+            returnType = "void"
+            paramTypes = listOf("boolean")
+        }
+    }.first()
+}
+
+val HideTypingStatus = patch(
+    name = "Hide typing status",
+    description = "Stops people you are chatting with from seeing when you are typing in direct messages.",
+) {
+    runCatching {
+        ::typingStatusMethod.hookMethod(object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                val isTyping = param.args.getOrNull(0) as? Boolean ?: return
+                if (isTyping) {
+                    param.result = null
+                }
+            }
+        })
+        PatcherLog.info { "a092devs Instagram: typing status indicator suppressed" }
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: typing status hook skipped" } }
+}
+
+internal val feedDoubleTapMethod = findMethodDirect {
+    findMethod {
+        matcher {
+            usingStrings(
+                listOf("DefaultMediaHolderGestureDetectorDelegateImpl#onDoubleTapMedia called with null activity"),
+                StringMatchType.Contains,
+            )
+        }
+    }.first()
+}
+
+val TurnOffDoubleTapLike = patch(
+    name = "Turn off double tap to like",
+    description = "Stops double-tapping posts and reels from liking them, preventing accidental likes while scrolling.",
+) {
+    runCatching {
+        ::feedDoubleTapMethod.hookMethod(object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                param.result = null
+            }
+        })
+        PatcherLog.info { "a092devs Instagram: feed double-tap like suppressed" }
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: feed double-tap hook skipped" } }
+}
+
 val InstagramPatches = arrayOf(
     HideAds,
     HideSuggestedPosts,
     HideReelsAds,
     ViewStoriesAnonymously,
     ViewLiveAnonymously,
+    StopStoryAutoAdvance,
+    HideTypingStatus,
+    TurnOffDoubleTapLike,
     AllowScreenshots,
     BlockScreenshotDetection,
     SanitizeShareLinks,

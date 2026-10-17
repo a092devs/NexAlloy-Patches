@@ -5,6 +5,19 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.13.0
+
+- `a092devs` 1.8.2:
+  * Instagram (`com.instagram.android` 451.0.0.53.80): added custom download folder configuration,
+    allowing users to set any custom base folder path (or reset to `NexAlloyNext/Instagram`).
+  * Instagram: redesigned the Download Settings dialog into a smooth, in-place update interface,
+    eliminating the flickering dismiss-and-reopen behavior on option toggles.
+  * Instagram: added new patches ported from HushGram:
+    - `Stop story auto-advance`: keeps stories on screen without advancing automatically until tapped or swiped.
+    - `Hide typing status`: suppresses typing indicator packets so other users do not see when you are typing in chats.
+    - `Turn off double tap to like`: stops double tapping posts, reels, and comments from liking them, preventing accidental likes while scrolling.
+  * Instagram: expanded suggested content filter rules to intercept additional recommendation endpoints.
+
 ## 2.12.0
 
 - `a092devs` 1.8.1:

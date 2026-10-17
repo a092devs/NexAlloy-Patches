@@ -51,7 +51,9 @@ object InstagramRequestFilter {
                 path.contains("profile_ads/get_profile_ads/") -> Rule.ADS
 
             path.contains("/discover/ayml") ||
-                path.contains("/discover/chaining") -> Rule.SUGGESTED
+                path.contains("/discover/chaining") ||
+                path.contains("/suggested_users") ||
+                path.contains("/discover/suggested_businesses") -> Rule.SUGGESTED
 
             else -> null
         }

@@ -36,14 +36,32 @@ internal class DownloadSettings private constructor(private val prefs: SharedPre
         get() = prefs.getBoolean(KEY_TIMESTAMP, false)
         set(value) { prefs.edit().putBoolean(KEY_TIMESTAMP, value).apply() }
 
+    /** Custom base folder under the chosen location (defaults to [DEFAULT_FOLDER]). */
+    var customFolder: String
+        get() = prefs.getString(KEY_CUSTOM_FOLDER, null)?.trim()?.trim('/')?.takeIf { it.isNotEmpty() } ?: DEFAULT_FOLDER
+        set(value) {
+            var cleaned = value.trim().trim('/')
+            if (cleaned.startsWith("Download/", ignoreCase = true)) {
+                cleaned = cleaned.substring("Download/".length).trim('/')
+            } else if (cleaned.startsWith("Downloads/", ignoreCase = true)) {
+                cleaned = cleaned.substring("Downloads/".length).trim('/')
+            }
+            if (cleaned.isEmpty() || cleaned.equals(DEFAULT_FOLDER, ignoreCase = true)) {
+                prefs.edit().remove(KEY_CUSTOM_FOLDER).apply()
+            } else {
+                prefs.edit().putString(KEY_CUSTOM_FOLDER, cleaned).apply()
+            }
+        }
+
     enum class Kind { VIDEO, IMAGE, AUDIO }
 
     /** The folder under the base directory, with [username]'s subfolder when asked for. */
     fun folder(username: String?): String {
+        val base = customFolder
         val name = username?.takeIf { perUsername }
             ?.filter { it.isLetterOrDigit() || it == '.' || it == '_' || it == '-' }
             ?.takeIf { it.isNotBlank() }
-        return if (name != null) "$FOLDER/$name" else FOLDER
+        return if (name != null) "$base/$name" else base
     }
 
     /** The public directory a save of this kind starts at. */
@@ -74,9 +92,11 @@ internal class DownloadSettings private constructor(private val prefs: SharedPre
         private const val KEY_LOCATION = "save_location"
         private const val KEY_PER_USERNAME = "per_username_folders"
         private const val KEY_TIMESTAMP = "timestamp_names"
+        private const val KEY_CUSTOM_FOLDER = "custom_download_folder"
 
-        /** The folder of the a092devs contract, under whichever base the person chose. */
-        const val FOLDER = "NexAlloyNext/Instagram"
+        /** The default folder under whichever base the person chose. */
+        const val DEFAULT_FOLDER = "NexAlloyNext/Instagram"
+        const val FOLDER = DEFAULT_FOLDER
 
         fun open(context: Context) = DownloadSettings(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
     }

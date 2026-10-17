@@ -1,6 +1,7 @@
 package io.github.nexalloy.a092devs.instagram.download
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -8,6 +9,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -15,7 +17,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import android.util.TypedValue
 import android.view.View
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import io.github.nexalloy.HookDsl
 import io.github.nexalloy.IScopedHookCallback
@@ -465,33 +472,150 @@ private fun download(
 }
 
 /**
- * The download settings: where saves land, per-username folders and timestamp names. Each row shows its current
- * state; a tap flips it, says so and shows the menu again with the new state, so the change is visible at once.
+ * The download settings: save location, custom folder path, per-username folders and timestamp names.
+ * Interactive in-place UI updating without flickering dismiss/re-create cycles.
  */
 private fun showDownloadSettings(dialog: InstagramDialog, activity: Activity) {
     val settings = DownloadSettings.open(activity)
-    fun onOff(value: Boolean) = if (value) "On" else "Off"
-    val options = mutableListOf<Pair<String, () -> Unit>>()
-    options += "Save to: ${settings.location.label}" to {
+    val density = activity.resources.displayMetrics.density
+    val dp = { value: Int -> (value * density).toInt() }
+
+    val typedValue = TypedValue()
+    val primaryColor = if (activity.theme.resolveAttribute(android.R.attr.textColorPrimary, typedValue, true)) {
+        typedValue.data
+    } else {
+        0xFFEEEEEE.toInt()
+    }
+    val secondaryColor = if (activity.theme.resolveAttribute(android.R.attr.textColorSecondary, typedValue, true)) {
+        typedValue.data
+    } else {
+        0xFF9E9E9E.toInt()
+    }
+
+    val container = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(22), dp(10), dp(22), dp(10))
+    }
+
+    fun addSettingRow(
+        title: String,
+        getSummary: () -> String,
+        onClick: (updateSummary: () -> Unit) -> Unit,
+    ) {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            isClickable = true
+            isFocusable = true
+            val outValue = TypedValue()
+            activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+            setPadding(0, dp(12), 0, dp(12))
+        }
+
+        val titleView = TextView(activity).apply {
+            text = title
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(primaryColor)
+        }
+        val summaryView = TextView(activity).apply {
+            text = getSummary()
+            textSize = 13.5f
+            setTextColor(secondaryColor)
+            setPadding(0, dp(3), 0, 0)
+        }
+
+        row.addView(titleView)
+        row.addView(summaryView)
+
+        val updateSummary = { summaryView.text = getSummary() }
+        row.setOnClickListener { onClick(updateSummary) }
+        container.addView(row)
+    }
+
+    // 1. Save location
+    addSettingRow(
+        title = "Save location",
+        getSummary = { settings.location.label },
+    ) { update ->
         settings.location = if (settings.location == DownloadSettings.Location.DOWNLOADS) {
             DownloadSettings.Location.GALLERY
         } else {
             DownloadSettings.Location.DOWNLOADS
         }
+        update()
         toast(activity, "Saves go to ${settings.location.label}")
-        showDownloadSettings(dialog, activity)
     }
-    options += "Folder per username: ${onOff(settings.perUsername)}" to {
+
+    // 2. Download folder
+    addSettingRow(
+        title = "Download folder",
+        getSummary = { settings.customFolder },
+    ) { update ->
+        val input = EditText(activity).apply {
+            setText(settings.customFolder)
+            setSelection(text.length)
+            setSingleLine(true)
+        }
+        val dialogView = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+            addView(input)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Change download folder")
+            .setMessage("Base folder path relative to storage root (e.g. NexAlloyNext/Instagram):")
+            .setView(dialogView)
+            .setPositiveButton("Save") { _, _ ->
+                val newFolder = input.text.toString().trim()
+                settings.customFolder = newFolder
+                update()
+                toast(activity, "Download folder: ${settings.customFolder}")
+            }
+            .setNeutralButton("Reset") { _, _ ->
+                settings.customFolder = DownloadSettings.DEFAULT_FOLDER
+                update()
+                toast(activity, "Reset to default: ${DownloadSettings.DEFAULT_FOLDER}")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // 3. Folder per username
+    addSettingRow(
+        title = "Folder per username",
+        getSummary = {
+            if (settings.perUsername) "Enabled (save into username subfolder)"
+            else "Disabled (save directly into download folder)"
+        },
+    ) { update ->
         settings.perUsername = !settings.perUsername
-        toast(activity, "Folder per username: ${onOff(settings.perUsername)}")
-        showDownloadSettings(dialog, activity)
+        update()
+        toast(activity, "Folder per username: ${if (settings.perUsername) "On" else "Off"}")
     }
-    options += "Timestamp names: ${onOff(settings.timestamp)}" to {
+
+    // 4. Timestamp file names
+    addSettingRow(
+        title = "Timestamp names",
+        getSummary = {
+            if (settings.timestamp) "Enabled (append date & time to file name)"
+            else "Disabled (use original file name)"
+        },
+    ) { update ->
         settings.timestamp = !settings.timestamp
-        toast(activity, "Timestamp names: ${onOff(settings.timestamp)}")
-        showDownloadSettings(dialog, activity)
+        update()
+        toast(activity, "Timestamp names: ${if (settings.timestamp) "On" else "Off"}")
     }
-    dialog.show(activity, "Download settings", options)
+
+    val scrollView = ScrollView(activity).apply {
+        addView(container)
+    }
+
+    AlertDialog.Builder(activity)
+        .setTitle("Download settings")
+        .setView(scrollView)
+        .setPositiveButton("Done") { d, _ -> d.dismiss() }
+        .show()
 }
 
 /**
@@ -512,8 +636,8 @@ private fun activityIn(owner: Any): Activity? {
 val DownloadMedia = patch(
     name = "Download media",
     description = "Adds download options to the menus of posts, reels and stories, and to profile pictures. " +
-        "Files are saved to Download/NexAlloyNext/Instagram; the download settings change the location, use per-username " +
-        "folders and timestamp names.",
+        "Files are saved to Download/NexAlloyNext/Instagram by default; the download settings allow customizing " +
+        "the folder path, save location, per-username subfolders and timestamp names.",
 ) {
     val mediaClass = classLoader.loadClass(MEDIA_CLASS)
     fun <T> optional(name: String, find: () -> T) =
