@@ -232,6 +232,198 @@ private fun showVariants(
 })
 
 /**
+ * Saves the audio of [item] for [username], fetching either its direct audio stream (DASH/music) or
+ * extracting the AAC audio track from its video file with Android's MediaExtractor and MediaMuxer.
+ */
+private fun downloadAudio(activity: Activity, item: MediaExtractor.Item, username: String?) {
+    val appContext = activity.applicationContext ?: activity
+    val settings = DownloadSettings.open(appContext)
+    toast(activity, "Downloading audio")
+
+    Thread {
+        try {
+            val audioUrl = item.audioUrl
+            val success = if (audioUrl != null) {
+                saveDirectAudio(appContext, audioUrl, item, settings, username)
+            } else if (item.isVideo) {
+                extractAndSaveAudio(appContext, item, settings, username)
+            } else {
+                false
+            }
+
+            val destination = settings.destination(username, DownloadSettings.Kind.AUDIO)
+            mainHandler.post {
+                if (success) {
+                    toast(appContext, "Saved to $destination")
+                } else {
+                    toast(appContext, "Audio download failed")
+                }
+            }
+        } catch (e: Exception) {
+            log("failed to save audio: ${e.stackTraceToString().take(1500)}")
+            mainHandler.post { toast(appContext, "Audio download failed") }
+        }
+    }.apply { name = "NexAlloy audio download" }.start()
+}
+
+private fun saveDirectAudio(
+    context: Context,
+    audioUrl: String,
+    item: MediaExtractor.Item,
+    settings: DownloadSettings,
+    username: String?,
+): Boolean {
+    val rawName = Uri.parse(audioUrl).lastPathSegment?.takeIf { it.contains('.') }
+        ?: Uri.parse(item.url).lastPathSegment?.takeIf { it.contains('.') }
+        ?: "audio_${System.currentTimeMillis()}.m4a"
+    val base = if (rawName.contains('.')) rawName.substring(0, rawName.lastIndexOf('.')) else rawName
+    val ext = if (rawName.endsWith(".mp3", ignoreCase = true)) ".mp3" else ".m4a"
+    val name = "$base$ext".withTimestamp(settings.timestamp)
+    val mimeType = if (ext == ".mp3") "audio/mpeg" else "audio/mp4"
+
+    val connection = URL(audioUrl).openConnection() as HttpURLConnection
+    try {
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 30_000
+        if (connection.responseCode !in 200..299) {
+            if (item.isVideo) return extractAndSaveAudio(context, item, settings, username)
+            return false
+        }
+
+        connection.inputStream.use { input ->
+            writeAudioToDestination(context, input, name, mimeType, settings, username)
+        }
+        return true
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun extractAndSaveAudio(
+    context: Context,
+    item: MediaExtractor.Item,
+    settings: DownloadSettings,
+    username: String?,
+): Boolean {
+    val rawName = Uri.parse(item.url).lastPathSegment?.takeIf { it.contains('.') }
+        ?: "audio_${System.currentTimeMillis()}.mp4"
+    val base = if (rawName.contains('.')) rawName.substring(0, rawName.lastIndexOf('.')) else rawName
+    val name = "$base.m4a".withTimestamp(settings.timestamp)
+    val mimeType = "audio/mp4"
+
+    val cacheDir = context.cacheDir ?: return false
+    val tempVideo = File.createTempFile("nex_vid_", ".mp4", cacheDir)
+    val tempAudio = File.createTempFile("nex_aud_", ".m4a", cacheDir)
+    try {
+        val connection = URL(item.url).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 30_000
+        if (connection.responseCode !in 200..299) return false
+        connection.inputStream.use { input ->
+            tempVideo.outputStream().use { output -> input.copyTo(output) }
+        }
+        connection.disconnect()
+
+        val extracted = extractAudioTrack(tempVideo, tempAudio)
+        if (!extracted || tempAudio.length() == 0L) {
+            log("no audio track found in ${item.url}")
+            return false
+        }
+
+        tempAudio.inputStream().use { input ->
+            writeAudioToDestination(context, input, name, mimeType, settings, username)
+        }
+        return true
+    } catch (e: Exception) {
+        log("audio extraction failed: $e")
+        return false
+    } finally {
+        tempVideo.delete()
+        tempAudio.delete()
+    }
+}
+
+private fun extractAudioTrack(sourceFile: File, outputFile: File): Boolean {
+    val extractor = android.media.MediaExtractor()
+    var muxer: android.media.MediaMuxer? = null
+    try {
+        extractor.setDataSource(sourceFile.absolutePath)
+        var audioTrackIndex = -1
+        for (i in 0 until extractor.trackCount) {
+            val format = extractor.getTrackFormat(i)
+            val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+            if (mime.startsWith("audio/")) {
+                audioTrackIndex = i
+                extractor.selectTrack(i)
+                muxer = android.media.MediaMuxer(
+                    outputFile.absolutePath,
+                    android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
+                )
+                muxer.addTrack(format)
+                muxer.start()
+                break
+            }
+        }
+        if (audioTrackIndex == -1 || muxer == null) return false
+
+        val buffer = java.nio.ByteBuffer.allocateDirect(256 * 1024)
+        val bufferInfo = android.media.MediaCodec.BufferInfo()
+        while (true) {
+            bufferInfo.offset = 0
+            bufferInfo.size = extractor.readSampleData(buffer, 0)
+            if (bufferInfo.size < 0) break
+            bufferInfo.presentationTimeUs = extractor.sampleTime
+            bufferInfo.flags = extractor.sampleFlags
+            muxer.writeSampleData(0, buffer, bufferInfo)
+            extractor.advance()
+        }
+        return true
+    } catch (e: Exception) {
+        log("MediaExtractor/Muxer error: $e")
+        return false
+    } finally {
+        runCatching { muxer?.stop() }
+        runCatching { muxer?.release() }
+        runCatching { extractor.release() }
+    }
+}
+
+private fun writeAudioToDestination(
+    context: Context,
+    input: java.io.InputStream,
+    name: String,
+    mimeType: String,
+    settings: DownloadSettings,
+    username: String?,
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${settings.baseDirectory(DownloadSettings.Kind.AUDIO)}/${settings.folder(username)}")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(settings.collection(DownloadSettings.Kind.AUDIO), values)
+            ?: throw IOException("MediaStore did not create $name")
+        try {
+            resolver.openOutputStream(uri)!!.use { output -> input.copyTo(output) }
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        val base = Environment.getExternalStoragePublicDirectory(settings.baseDirectory(DownloadSettings.Kind.AUDIO))
+        val folder = File(base, settings.folder(username))
+        folder.mkdirs()
+        File(folder, name).outputStream().use { output -> input.copyTo(output) }
+    }
+    log("saved audio $name to ${settings.destination(username, DownloadSettings.Kind.AUDIO)}")
+}
+
+/**
  * Shows Piko's download options for the item at [position], the item of a carousel on screen, of [username].
  */
 private fun download(
@@ -247,6 +439,9 @@ private fun download(
     val options = mutableListOf<Pair<String, () -> Unit>>()
     options += "Download current media" to { enqueue(activity, listOf(current), username) }
     asImage(current)?.let { image -> options += "Download as image" to { enqueue(activity, listOf(image), username) } }
+    if (current.isVideo || current.audioUrl != null) {
+        options += "Download audio" to { downloadAudio(activity, current, username) }
+    }
     options += "Copy media link" to { copyLink(activity, current.url) }
     if (current.imageVariants.isNotEmpty()) {
         options += "Image variants" to {
@@ -317,7 +512,7 @@ private fun activityIn(owner: Any): Activity? {
 val DownloadMedia = patch(
     name = "Download media",
     description = "Adds download options to the menus of posts, reels and stories, and to profile pictures. " +
-        "Files are saved to Download/Instagram; the download settings change the location, use per-username " +
+        "Files are saved to Download/NexAlloyNext/Instagram; the download settings change the location, use per-username " +
         "folders and timestamp names.",
 ) {
     val mediaClass = classLoader.loadClass(MEDIA_CLASS)
@@ -330,6 +525,7 @@ val DownloadMedia = patch(
         optional("Media carousel getter") { ::mediaCarouselGetter.method },
         optional("Video width getter") { ::videoVersionWidthGetter.method },
         optional("Video height getter") { ::videoVersionHeightGetter.method },
+        optional("Media dash manifest getter") { ::mediaDashManifestGetter.method },
         ::log,
     )
     val dialog = InstagramDialog(

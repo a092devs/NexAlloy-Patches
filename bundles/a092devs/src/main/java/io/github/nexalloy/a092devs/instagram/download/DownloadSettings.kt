@@ -36,6 +36,8 @@ internal class DownloadSettings private constructor(private val prefs: SharedPre
         get() = prefs.getBoolean(KEY_TIMESTAMP, false)
         set(value) { prefs.edit().putBoolean(KEY_TIMESTAMP, value).apply() }
 
+    enum class Kind { VIDEO, IMAGE, AUDIO }
+
     /** The folder under the base directory, with [username]'s subfolder when asked for. */
     fun folder(username: String?): String {
         val name = username?.takeIf { perUsername }
@@ -45,21 +47,27 @@ internal class DownloadSettings private constructor(private val prefs: SharedPre
     }
 
     /** The public directory a save of this kind starts at. */
-    fun baseDirectory(isVideo: Boolean): String = when {
+    fun baseDirectory(kind: Kind): String = when {
         location == Location.DOWNLOADS -> Environment.DIRECTORY_DOWNLOADS
-        isVideo -> Environment.DIRECTORY_MOVIES
+        kind == Kind.VIDEO -> Environment.DIRECTORY_MOVIES
+        kind == Kind.AUDIO -> Environment.DIRECTORY_MUSIC
         else -> Environment.DIRECTORY_PICTURES
     }
 
     /** The MediaStore collection a save of this kind is inserted into. */
-    fun collection(isVideo: Boolean): Uri = when {
+    fun collection(kind: Kind): Uri = when {
         location == Location.DOWNLOADS -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        isVideo -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        kind == Kind.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        kind == Kind.AUDIO -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         else -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
     }
 
     /** Where a save of [username] lands, for the toasts and the log. */
-    fun destination(username: String?, isVideo: Boolean) = "${baseDirectory(isVideo)}/${folder(username)}"
+    fun destination(username: String?, kind: Kind) = "${baseDirectory(kind)}/${folder(username)}"
+
+    fun baseDirectory(isVideo: Boolean): String = baseDirectory(if (isVideo) Kind.VIDEO else Kind.IMAGE)
+    fun collection(isVideo: Boolean): Uri = collection(if (isVideo) Kind.VIDEO else Kind.IMAGE)
+    fun destination(username: String?, isVideo: Boolean) = destination(username, if (isVideo) Kind.VIDEO else Kind.IMAGE)
 
     companion object {
         private const val PREFS = "nexalloy_downloads"
@@ -68,7 +76,7 @@ internal class DownloadSettings private constructor(private val prefs: SharedPre
         private const val KEY_TIMESTAMP = "timestamp_names"
 
         /** The folder of the a092devs contract, under whichever base the person chose. */
-        const val FOLDER = "Instagram"
+        const val FOLDER = "NexAlloyNext/Instagram"
 
         fun open(context: Context) = DownloadSettings(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
     }

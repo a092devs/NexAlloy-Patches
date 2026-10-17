@@ -91,6 +91,11 @@ val mediaCarouselGetter = findMethodDirect {
     mediaGetter("carousel_media", "java.util.List")
 }
 
+val mediaDashManifestGetter = findMethodDirect {
+    runCatching { pandoGetter(MEDIA_CLASS, "video_dash_manifest", "java.lang.String") }
+        .getOrElse { mediaGetter("video_dash_manifest", "java.lang.String") }
+}
+
 internal const val USER_CLASS = "com.instagram.user.model.User"
 
 /**

@@ -25,6 +25,7 @@ internal class MediaExtractor(
     private val carouselGetter: Method?,
     private val videoWidthGetter: Method?,
     private val videoHeightGetter: Method?,
+    private val dashManifestGetter: Method? = null,
     private val log: (String) -> Unit,
 ) {
     constructor(
@@ -34,6 +35,7 @@ internal class MediaExtractor(
         carouselGetter: Method?,
         videoWidthGetter: Method?,
         videoHeightGetter: Method?,
+        dashManifestGetter: Method? = null,
         log: (String) -> Unit,
     ) : this(
         classLoader.loadClass("com.instagram.feed.media.Media"),
@@ -45,6 +47,7 @@ internal class MediaExtractor(
         carouselGetter?.apply { isAccessible = true },
         videoWidthGetter?.apply { isAccessible = true },
         videoHeightGetter?.apply { isAccessible = true },
+        dashManifestGetter?.apply { isAccessible = true },
         log,
     )
 
@@ -64,6 +67,7 @@ internal class MediaExtractor(
         val imageUrl: String?,
         val imageVariants: List<Variant> = emptyList(),
         val videoVariants: List<Variant> = emptyList(),
+        val audioUrl: String? = null,
     )
 
     /**
@@ -95,11 +99,13 @@ internal class MediaExtractor(
                 fields(data.javaClass).firstOrNull { imageInfoClass.isAssignableFrom(it.type) }?.get(data)
             }
         val imageVariants = imageInfo?.let(::imageVariants).orEmpty()
+        val manifest = get(dashManifestGetter, media) as? String
+        val audioUrl = DashManifest.bestAudioUrl(manifest)
         val video = videoVariants.firstOrNull()?.url
         val image = imageVariants.firstOrNull()?.url
-        if (video != null) return Item(video, isVideo = true, imageUrl = image, imageVariants, videoVariants)
+        if (video != null) return Item(video, isVideo = true, imageUrl = image, imageVariants, videoVariants, audioUrl = audioUrl)
         if (image == null) log("no video or image in ${media.javaClass.name} (versions ${versions?.size}, imageInfo $imageInfo)")
-        return image?.let { Item(it, isVideo = false, imageUrl = it, imageVariants) }
+        return image?.let { Item(it, isVideo = false, imageUrl = it, imageVariants, audioUrl = audioUrl) }
     }
 
     /**

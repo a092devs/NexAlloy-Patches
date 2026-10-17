@@ -48,5 +48,35 @@ class InstagramPatchesTest {
         assertEquals("https://example.com/a", InstagramLinks.sanitizeUrl("https://example.com/a"))
         assertEquals("not a url", InstagramLinks.sanitizeUrl("not a url"))
     }
+
+    @Test
+    fun testDashManifestAudioExtraction() {
+        val sampleMpd = """
+            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" minBufferTime="PT1.500S">
+              <Period duration="PT0H0M28.028S">
+                <AdaptationSet segmentAlignment="true" maxWidth="720" maxHeight="1280">
+                  <Representation id="1" mimeType="video/mp4" codecs="avc1.64001F" bandwidth="1158670">
+                    <BaseURL>https://video.xx.fbcdn.net/video.mp4</BaseURL>
+                  </Representation>
+                </AdaptationSet>
+                <AdaptationSet segmentAlignment="true" mimeType="audio/mp4">
+                  <Representation id="2" codecs="mp4a.40.2" bandwidth="131072">
+                    <BaseURL>https://video.xx.fbcdn.net/audio_best.m4a?a=1&amp;b=2</BaseURL>
+                  </Representation>
+                  <Representation id="3" codecs="mp4a.40.5" bandwidth="64000">
+                    <BaseURL>https://video.xx.fbcdn.net/audio_low.m4a</BaseURL>
+                  </Representation>
+                </AdaptationSet>
+              </Period>
+            </MPD>
+        """.trimIndent()
+
+        val audioUrl = io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl(sampleMpd)
+        assertEquals("https://video.xx.fbcdn.net/audio_best.m4a?a=1&b=2", audioUrl)
+
+        assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl(null))
+        assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl(""))
+        assertNull(io.github.nexalloy.a092devs.instagram.download.DashManifest.bestAudioUrl("<MPD></MPD>"))
+    }
 }
 

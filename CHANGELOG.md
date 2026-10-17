@@ -5,6 +5,15 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.12.0
+
+- `a092devs` 1.8.1:
+  * Instagram (`com.instagram.android` 451.0.0.53.80): added "Download audio" option to the download
+    dialog for reels and videos, saving the audio track as an `.m4a` file directly into
+    `Download/NexAlloyNext/Instagram` using DASH manifest stream extraction with native media muxer fallback.
+  * Instagram: default download folder path under Downloads is now `Download/NexAlloyNext/Instagram`
+    on device storage (with optional poster subfolder when per-username folders are enabled).
+
 ## 2.11.0
 
 - `a092devs` 1.8.0:
