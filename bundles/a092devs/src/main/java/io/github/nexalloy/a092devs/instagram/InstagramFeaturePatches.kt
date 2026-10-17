@@ -2,9 +2,14 @@ package io.github.nexalloy.a092devs.instagram
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.text.format.DateUtils
 import android.view.Display
 import android.view.SurfaceView
@@ -12,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.widget.TextView
+import android.widget.Toast
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
@@ -42,17 +48,19 @@ val TurnOffHdrBoosts = patch(
     description = "Stops HDR photos and reels from making the screen brighter than everything else.",
 ) {
     // Window.setColorMode: replace HDR modes (2, 3) with COLOR_MODE_DEFAULT (0)
-    runCatching {
-        val windowClass = Window::class.java
-        windowClass.declaredMethods.filter { it.name == "setColorMode" }.forEach { method ->
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    val mode = param.args.getOrNull(0) as? Int ?: return
-                    if (mode == 2 || mode == 3) {
-                        param.args[0] = 0
+    for (windowClassName in listOf("android.view.Window", "com.android.internal.policy.PhoneWindow")) {
+        runCatching {
+            val winClass = classLoader.loadClass(windowClassName)
+            winClass.declaredMethods.filter { it.name == "setColorMode" }.forEach { method ->
+                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val mode = param.args.getOrNull(0) as? Int ?: return
+                        if (mode == 2 || mode == 3) {
+                            param.args[0] = 0
+                        }
                     }
-                }
-            })
+                })
+            }
         }
     }
 
@@ -204,18 +212,7 @@ val UploadStoriesAtFullQuality = patch(
 }
 
 // 4. Tap a feed video to pause it
-internal val feedSingleTapMethod = findMethodDirect {
-    findMethod {
-        matcher {
-            usingStrings(
-                listOf("DefaultMediaHolderGestureDetectorDelegateImpl#onSingleTapConfirmed"),
-                StringMatchType.Contains,
-            )
-        }
-    }.first()
-}
-
-internal val feedTapHandlerSoftErrorMethod = findMethodDirect {
+internal val feedMediaTapMethod = findMethodDirect {
     findMethod {
         matcher {
             usingStrings(listOf("FeedMediaTapHandlerV2-softError"), StringMatchType.Contains)
@@ -228,26 +225,45 @@ val TapFeedVideoToPause = patch(
     name = "Tap a feed video to pause it",
     description = "Tapping a video in the home feed pauses or plays it in place instead of opening Reels.",
 ) {
-    var hooked = false
     runCatching {
-        ::feedSingleTapMethod.hookMethod(object : XC_MethodHook() {
+        ::feedMediaTapMethod.hookMethod(object : XC_MethodHook() {
             override fun beforeHookedMethod(param: MethodHookParam) {
-                param.result = true
-                PatcherLog.info { "a092devs Instagram: Feed video tap intercepted (playback toggled)" }
+                val handler = param.thisObject ?: return
+                val media = param.args.getOrNull(1) ?: return
+                val isVideo = runCatching {
+                    media.javaClass.getMethod("Eby").invoke(media) as? Boolean
+                }.getOrNull() ?: false
+                if (!isVideo) return
+
+                val holder = param.args.getOrNull(3)
+                val state = param.args.getOrNull(4)
+
+                var controller: Any? = null
+                for (field in handler.javaClass.declaredFields) {
+                    field.isAccessible = true
+                    val obj = runCatching { field.get(handler) }.getOrNull() ?: continue
+                    val valueMethod = obj.javaClass.methods.firstOrNull { it.name == "getValue" && it.parameterTypes.isEmpty() }
+                    val possible = runCatching { valueMethod?.invoke(obj) }.getOrNull() ?: obj
+                    if (possible.javaClass.declaredMethods.any {
+                        it.parameterTypes.size == 3 && it.returnType == Void.TYPE && it.parameterTypes[0].name.contains("Media")
+                    }) {
+                        controller = possible
+                        break
+                    }
+                }
+
+                if (controller != null && holder != null && state != null) {
+                    val toggleMethod = controller.javaClass.declaredMethods.firstOrNull {
+                        it.parameterTypes.size == 3 && it.returnType == Void.TYPE && it.parameterTypes[0].name.contains("Media")
+                    }?.apply { isAccessible = true }
+                    toggleMethod?.invoke(controller, media, holder, state)
+                    param.result = null
+                    PatcherLog.info { "a092devs Instagram: Feed video tap toggled playback in-place (reels opening suppressed)" }
+                }
             }
         })
-        hooked = true
-    }
-    if (!hooked) {
-        runCatching {
-            ::feedTapHandlerSoftErrorMethod.hookMethod(object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    param.result = null
-                    PatcherLog.info { "a092devs Instagram: Feed media tap handler intercepted" }
-                }
-            })
-        }
-    }
+        PatcherLog.info { "a092devs Instagram: Tap a feed video to pause it installed" }
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: feedMediaTapMethod hook failed" } }
 }
 
 // 5. Show if a profile follows you
@@ -276,30 +292,47 @@ val ShowIfProfileFollowsYou = patch(
                 val context = headerView.context ?: return
                 val nameId = context.resources.getIdentifier("profile_header_full_name_above_vanity", "id", context.packageName)
                 val nameView = if (nameId != 0) headerView.findViewById<TextView>(nameId) else null
-                val targetTextView = nameView ?: findFirstTextView(headerView) ?: return
+                val targetTextView = nameView
+                    ?: (context.resources.getIdentifier("profile_header_full_name", "id", context.packageName).takeIf { it != 0 }?.let { headerView.findViewById<TextView>(it) })
+                    ?: findFirstTextView(headerView) ?: return
 
-                val user = param.args.firstOrNull { it != null && it.javaClass.name.contains("User") }
+                var user: Any? = param.args.firstOrNull { it != null && it.javaClass.name.contains("User") }
+                if (user == null) {
+                    for (arg in param.args) {
+                        if (arg == null) continue
+                        for (field in arg.javaClass.declaredFields) {
+                            field.isAccessible = true
+                            val obj = runCatching { field.get(arg) }.getOrNull() ?: continue
+                            if (obj.javaClass.name.contains("UserDetailViewModel")) {
+                                val userField = obj.javaClass.declaredFields.firstOrNull { it.type.name.contains("User") }
+                                user = userField?.apply { isAccessible = true }?.get(obj)
+                                if (user != null) break
+                            }
+                        }
+                        if (user != null) break
+                    }
+                }
+
                 if (user != null) {
                     val isFollowedBy = runCatching {
-                        val m = user.javaClass.methods.firstOrNull { it.name == "isFollowedBy" || it.name == "getFollowedBy" }
-                        m?.invoke(user) as? Boolean
+                        user.javaClass.methods.firstOrNull { it.name == "A2N" && it.parameterTypes.isEmpty() && it.returnType == java.lang.Boolean::class.java }?.invoke(user) as? Boolean
+                    }.getOrNull() ?: runCatching {
+                        val m = user.javaClass.methods.firstOrNull { it.name == "Cuj" && it.parameterTypes.size == 1 && it.parameterTypes[0] == Integer.TYPE }
+                        m?.invoke(user, 1601672934) as? Boolean
+                    }.getOrNull() ?: runCatching {
+                        val f = user.javaClass.declaredFields.firstOrNull { it.type.name.contains("02A5") }?.apply { isAccessible = true }?.get(user)
+                        f?.javaClass?.declaredFields?.firstOrNull { it.name == "A2F" }?.apply { isAccessible = true }?.get(f) as? Boolean
                     }.getOrNull()
 
-                    val isFollowing = runCatching {
-                        val m = user.javaClass.methods.firstOrNull { it.name == "isFollowing" || it.name == "getFollowing" }
-                        m?.invoke(user) as? Boolean
-                    }.getOrNull()
-
-                    val label = when {
-                        isFollowedBy == true && isFollowing == true -> " · Following each other"
-                        isFollowedBy == true -> " · Follows you"
-                        isFollowedBy == false -> " · Doesn't follow you"
+                    val label = when (isFollowedBy) {
+                        true -> " · Follows you"
+                        false -> " · Doesn't follow you"
                         else -> null
                     }
 
                     if (label != null) {
                         val currentText = targetTextView.text?.toString() ?: ""
-                        if (!currentText.contains("Follows you") && !currentText.contains("Doesn't follow you") && !currentText.contains("Following each other")) {
+                        if (!currentText.contains("Follows you") && !currentText.contains("Doesn't follow you")) {
                             targetTextView.text = currentText + label
                         }
                     }
@@ -343,7 +376,8 @@ val SeeWhoStoryMentions = patch(
                 val context = pageView.context ?: return
 
                 val mentions = runCatching {
-                    val m = media.javaClass.methods.firstOrNull { it.name == "reel_mentions" || it.name == "getReelMentions" }
+                    val m = media.javaClass.methods.firstOrNull { it.name == "A9X" && it.parameterTypes.isEmpty() && java.util.List::class.java.isAssignableFrom(it.returnType) }
+                        ?: media.javaClass.methods.firstOrNull { it.parameterTypes.isEmpty() && java.util.List::class.java.isAssignableFrom(it.returnType) && (it.name == "reel_mentions" || it.name == "getReelMentions") }
                     m?.invoke(media) as? List<*>
                 }.getOrNull() ?: return
 
@@ -360,11 +394,20 @@ val SeeWhoStoryMentions = patch(
                             textSize = 12f
                             setTextColor(Color.WHITE)
                             setBackgroundColor(Color.parseColor("#80000000"))
-                            setPadding(8, 2, 8, 2)
+                            setPadding(12, 4, 12, 4)
                             setOnClickListener {
                                 val usernames = mentions.mapNotNull { item ->
-                                    item?.toString()
+                                    if (item == null) return@mapNotNull null
+                                    val user = runCatching {
+                                        item.javaClass.declaredFields.firstOrNull { it.type.name.contains("User") }?.apply { isAccessible = true }?.get(item)
+                                            ?: item.javaClass.methods.firstOrNull { it.returnType.name.contains("User") && it.parameterTypes.isEmpty() }?.invoke(item)
+                                    }.getOrNull() ?: item
+                                    val username = runCatching {
+                                        user.javaClass.methods.firstOrNull { it.name == "A8D" || it.name == "getUsername" || it.name == "getId" }?.invoke(user)?.toString()
+                                    }.getOrNull() ?: user.toString()
+                                    username
                                 }.toTypedArray()
+
                                 AlertDialog.Builder(context)
                                     .setTitle("Mentioned Accounts (${mentions.size})")
                                     .setItems(usernames) { _, index ->
@@ -385,11 +428,12 @@ val SeeWhoStoryMentions = patch(
 }
 
 // 7. Show post exact time
-internal val relativeTimeFormatterMethod = findMethodDirect {
+internal val timeFormatterMethod = findMethodDirect {
     findMethod {
         matcher {
             usingStrings(listOf("MMMM d"), StringMatchType.Contains)
             returnType = "java.lang.String"
+            paramCount = 10
         }
     }.first()
 }
@@ -399,54 +443,117 @@ val ShowPostExactTime = patch(
     description = "Shows the exact date and time a post or comment was uploaded instead of relative time like '3h'.",
 ) {
     runCatching {
-        ::relativeTimeFormatterMethod.hookMethod(object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
-                var seconds: Long? = null
-                for (arg in param.args) {
-                    if (arg is Double && arg > 1_000_000_000.0 && arg < 3_000_000_000.0) {
-                        seconds = arg.toLong()
-                        break
-                    } else if (arg is Long && arg > 1_000_000_000L && arg < 3_000_000_000L) {
-                        seconds = arg
-                        break
+        val formatterMethod = ::timeFormatterMethod.memberOrNull as? java.lang.reflect.Method ?: return@runCatching
+        val formatterClass = formatterMethod.declaringClass
+
+        formatterClass.declaredMethods.filter { it.returnType == java.lang.String::class.java }.forEach { method ->
+            XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    var seconds: Long? = null
+                    for (arg in param.args) {
+                        if (arg is Double && arg > 1_000_000_000.0 && arg < 3_000_000_000.0) {
+                            seconds = arg.toLong()
+                            break
+                        } else if (arg is Long && arg > 1_000_000_000L && arg < 3_000_000_000L) {
+                            seconds = arg
+                            break
+                        } else if (arg is Long && arg > 1_000_000_000_000L && arg < 3_000_000_000_000L) {
+                            seconds = arg / 1000L
+                            break
+                        }
+                    }
+                    if (seconds != null) {
+                        val flags = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH
+                        val formatted = DateUtils.formatDateTime(null, seconds * 1000L, flags)
+                        if (!formatted.isNullOrEmpty()) {
+                            param.result = formatted
+                        }
                     }
                 }
-                if (seconds != null) {
-                    val flags = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH
-                    val formatted = DateUtils.formatDateTime(null, seconds * 1000L, flags)
-                    if (!formatted.isNullOrEmpty()) {
-                        param.result = formatted
-                    }
-                }
-            }
-        })
+            })
+        }
         PatcherLog.info { "a092devs Instagram: Show post exact time installed" }
-    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: relativeTimeFormatterMethod hook skipped" } }
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: timeFormatterMethod hook skipped" } }
 }
 
 // 8. Save profile picture
+internal val profileOverflowMethod = findMethodDirect {
+    findMethod {
+        matcher {
+            usingStrings(listOf("UserOptionsOverflowHelper"), StringMatchType.Contains)
+            returnType = "void"
+            paramTypes = listOf("android.view.View")
+        }
+    }.first()
+}
+
 val SaveProfilePicture = patch(
     name = "Save profile picture",
     description = "Adds options to view and save full-resolution profile pictures directly from the profile screen.",
 ) {
-    for (className in listOf(
-        "com.instagram.user.useroptions.UserOptionsBottomSheetOverflowHelper",
-        "com.instagram.user.useroptions.UserOptionsOverflowHelper",
-    )) {
-        runCatching {
-            val helperClass = classLoader.loadClass(className)
-            helperClass.declaredMethods.forEach { method ->
-                if (method.returnType == Void.TYPE && method.parameterTypes.any { it.name.contains("User") }) {
-                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            PatcherLog.info { "a092devs Instagram: User options overflow opened" }
+    runCatching {
+        ::profileOverflowMethod.hookMethod(object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                val helper = param.thisObject ?: return
+                val activity = helper.javaClass.declaredFields.firstOrNull { Activity::class.java.isAssignableFrom(it.type) }
+                    ?.apply { isAccessible = true }?.get(helper) as? Activity ?: return
+
+                var user: Any? = null
+                for (field in helper.javaClass.declaredFields) {
+                    field.isAccessible = true
+                    val obj = runCatching { field.get(helper) }.getOrNull() ?: continue
+                    if (obj.javaClass.name.contains("UserDetailViewModel")) {
+                        user = obj.javaClass.declaredFields.firstOrNull { it.type.name.contains("User") }
+                            ?.apply { isAccessible = true }?.get(obj)
+                        if (user != null) break
+                    }
+                }
+
+                if (user == null) return
+
+                val avatarUrl = runCatching {
+                    val getPicMethod = user.javaClass.methods.firstOrNull { it.returnType.name.contains("ImageUrl") && it.parameterTypes.isEmpty() }
+                    val imgUrlObj = getPicMethod?.invoke(user)
+                    imgUrlObj?.javaClass?.methods?.firstOrNull { it.name == "getUrl" && it.parameterTypes.isEmpty() }?.invoke(imgUrlObj)?.toString()
+                }.getOrNull()
+
+                val username = runCatching {
+                    user.javaClass.methods.firstOrNull { it.name == "A8D" || it.name == "getUsername" }?.invoke(user)?.toString()
+                }.getOrNull() ?: "instagram_user"
+
+                if (avatarUrl != null) {
+                    val items = arrayOf("View Profile Picture", "Download Profile Picture", "Copy Username (@$username)")
+                    AlertDialog.Builder(activity)
+                        .setTitle("@$username Profile")
+                        .setItems(items) { _, which ->
+                            when (which) {
+                                0 -> InstagramLinks.openExternally(activity, avatarUrl)
+                                1 -> {
+                                    val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                                    val fileName = "${username}_profile_pic_${System.currentTimeMillis()}.jpg"
+                                    val request = DownloadManager.Request(Uri.parse(avatarUrl))
+                                        .setTitle(fileName)
+                                        .setDescription("Downloading Instagram profile picture")
+                                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "NexAlloyNext/Instagram/$fileName")
+                                    dm?.enqueue(request)
+                                    Toast.makeText(activity, "Downloading profile picture...", Toast.LENGTH_SHORT).show()
+                                }
+                                2 -> {
+                                    val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    clipboard?.setPrimaryClip(ClipData.newPlainText("username", username))
+                                    Toast.makeText(activity, "Copied @$username", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
-                    })
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    PatcherLog.info { "a092devs Instagram: Save profile picture options dialog displayed for @$username" }
                 }
             }
-        }
-    }
-    PatcherLog.info { "a092devs Instagram: Save profile picture installed" }
+        })
+        PatcherLog.info { "a092devs Instagram: Save profile picture installed" }
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: profileOverflowMethod hook skipped" } }
 }
 
 // 9. Open developer options
@@ -454,6 +561,7 @@ internal val optionsOpenerMethod = findMethodDirect {
     findMethod {
         matcher {
             usingStrings(listOf("debug_options_error"), StringMatchType.Contains)
+            paramTypes = listOf("android.content.Context", "androidx.fragment.app.FragmentActivity", "com.instagram.common.session.UserSession")
             returnType = "void"
         }
     }.first()
@@ -489,7 +597,7 @@ val OpenDeveloperOptions = patch(
 
                 val activity = activityField?.get(handlerObj) as? Activity
                 val session = sessionField?.get(handlerObj)
-                val openerInstance = instanceField?.get(null)
+                val openerInstance = instanceField?.get(null) ?: runCatching { openerClass.getDeclaredConstructor().newInstance() }.getOrNull()
 
                 if (activity != null && session != null && openerInstance != null) {
                     opener.invoke(openerInstance, activity, activity, session)

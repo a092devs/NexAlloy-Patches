@@ -5,6 +5,20 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.15.0
+
+- `a092devs` 1.8.4:
+  * Instagram (`com.instagram.android` 451.0.0.53.80): reverse-engineered and fully fixed all 9 feature patches to bind to verified runtime anchors:
+    - `Tap a feed video to pause it`: hooked `FeedMediaTapHandlerV2-softError` to invoke in-place video playback toggle and suppress opening Reels viewer.
+    - `Open developer options`: bound long-press on Home navigation tab to Instagram's internal `debug_options_error` opener with complete parameter signature.
+    - `Show if a profile follows you`: extracted relationship status directly from user model/view model and appended "Follows you" / "Doesn't follow you" to profile header name view.
+    - `See who a story mentions`: bound to `ReelViewerItemBinder.bindMedia` using mention list, adding interactive `@N` badge that displays mentioned accounts on tap.
+    - `Show a post's exact time`: hooked `LX/03ld` date/time formatting methods to format post, reel, and comment timestamps into exact readable dates and times.
+    - `Save profile picture`: hooked profile overflow helper to present options for viewing full-res avatar, downloading to `Download/NexAlloyNext/Instagram`, or copying username.
+    - `Turn off HDR brightness boosts`: suppressed HDR headroom requests and enforced default color mode across `Window` and `PhoneWindow`.
+    - `View DM photos and videos anonymously`: intercepted visual thread seen markers both via Tigon request filter and local completion callback.
+    - `Upload stories at full quality`: enforced 1080p high quality media upload transcode settings.
+
 ## 2.14.0
 
 - `a092devs` 1.8.3:
