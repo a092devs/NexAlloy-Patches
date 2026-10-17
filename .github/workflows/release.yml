@@ -41,6 +41,41 @@ jobs:
               with:
                   packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
 
+            - name: Determine release tag
+              id: release
+              shell: bash
+              env:
+                  INPUT_TAG: ${{ inputs.tag }}
+                  EVENT_NAME: ${{ github.event_name }}
+                  REF_NAME: ${{ github.ref_name }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+                    tag="$INPUT_TAG"
+                  else
+                    tag="$REF_NAME"
+                  fi
+
+                  if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+                    echo "::error::Invalid release tag: $tag"
+                    exit 1
+                  fi
+
+                  # Prevent accidental overwrites and duplicate release tags
+                  if gh release view "$tag" >/dev/null 2>&1; then
+                    echo "::error::Release $tag already exists on remote; duplicate releases and accidental overwrites are rejected."
+                    exit 1
+                  fi
+
+                  # Prevent conflicting version assignments: verify tag matches NexFusion versionName
+                  bundle_version="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' bundles/nexfusion/build.gradle.kts | head -n1)"
+                  if [[ -n "$bundle_version" && "$tag" != "$bundle_version"* ]]; then
+                    echo "::error::Conflicting version assignment: release tag $tag does not match NexFusion bundle versionName $bundle_version"
+                    exit 1
+                  fi
+
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
             - name: Unit tests
               run: ./gradlew testDebugUnitTest
 
@@ -59,6 +94,13 @@ jobs:
                     exit 1
                   fi
 
+                  # Verify NexFusion bundle was built
+                  nexfusion_files=(bundles/nexfusion/build/outputs/bundle/*.nxb)
+                  if (( ${#nexfusion_files[@]} == 0 )); then
+                    echo "::error::NexFusion bundle (nexfusion.nxb) was not generated."
+                    exit 1
+                  fi
+
                   mkdir -p release-assets
 
                   for file in "${files[@]}"; do
@@ -73,27 +115,6 @@ jobs:
 
                   echo "Generated ${#files[@]} bundle(s):"
                   ls -lh release-assets/
-
-            - name: Determine release tag
-              id: release
-              shell: bash
-              env:
-                  INPUT_TAG: ${{ inputs.tag }}
-                  EVENT_NAME: ${{ github.event_name }}
-                  REF_NAME: ${{ github.ref_name }}
-              run: |
-                  if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-                    tag="$INPUT_TAG"
-                  else
-                    tag="$REF_NAME"
-                  fi
-
-                  if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-                    echo "::error::Invalid release tag: $tag"
-                    exit 1
-                  fi
-
-                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
             - name: Generate release notes
               shell: bash
@@ -129,6 +150,19 @@ jobs:
                       --jq '.body' > release-notes.md
                   fi
 
+                  # Append machine-readable and human-readable compatibility metadata
+                  compat_series="$(sed -nE 's/.*compatibilitySeries = "([^"]+)".*/\1/p' bundles/nexfusion/build.gradle.kts | head -n1)"
+                  min_mgr="$(sed -nE 's/.*minManagerVersion = "([^"]+)".*/\1/p' bundles/nexfusion/build.gradle.kts | head -n1)"
+                  if [[ -n "$compat_series" ]]; then
+                    {
+                      echo ""
+                      echo "### Compatibility"
+                      echo "- **NexAlloyNext Series:** \`$compat_series\` (minimum manager version: \`$min_mgr\`)"
+                      echo "<!-- compat-series: $compat_series -->"
+                      echo "<!-- min-manager: $min_mgr -->"
+                    } >> release-notes.md
+                  fi
+
             - name: Publish GitHub Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -143,19 +177,14 @@ jobs:
                     exit 1
                   fi
 
-                  if gh release view "$TAG" >/dev/null 2>&1; then
-                    gh release upload "$TAG" "${assets[@]}" --clobber
-                  else
-                    flags=()
-
-                    if [[ "$TAG" == *-* ]]; then
-                      flags+=(--prerelease)
-                    fi
-
-                    gh release create "$TAG" \
-                      "${assets[@]}" \
-                      "${flags[@]}" \
-                      --target "$GITHUB_SHA" \
-                      --title "$TAG" \
-                      --notes-file release-notes.md
+                  flags=()
+                  if [[ "$TAG" == *-* ]]; then
+                    flags+=(--prerelease)
                   fi
+
+                  gh release create "$TAG" \
+                    "${assets[@]}" \
+                    "${flags[@]}" \
+                    --target "$GITHUB_SHA" \
+                    --title "$TAG" \
+                    --notes-file release-notes.md

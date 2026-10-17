@@ -1,0 +1,233 @@
+package io.github.nexalloy.nexfusion.facebook
+
+import io.github.nexalloy.morphe.Opcode
+import io.github.nexalloy.morphe.findClassDirect
+import io.github.nexalloy.morphe.findMethodDirect
+import io.github.nexalloy.morphe.findMethodListDirect
+import io.github.nexalloy.morphe.opcodeEnum
+import org.luckypray.dexkit.DexKitBridge
+import org.luckypray.dexkit.query.enums.StringMatchType
+import org.luckypray.dexkit.result.MethodData
+
+// Anchors taken from SysAdminDoc/Hushfacebook (GPL-3.0):
+//   patches/src/main/kotlin/app/morphe/patches/facebook/shared/FeedEdge.kt
+//   patches/src/main/kotlin/app/morphe/patches/facebook/ads/sponsoredreels/ReelsAdPool.kt
+//   patches/src/main/kotlin/app/morphe/patches/facebook/ads/sponsoredreels/ProfileReelAds.kt
+//   patches/src/main/kotlin/app/morphe/patches/facebook/ads/sponsoredreels/Fingerprints.kt
+//   patches/src/main/kotlin/app/morphe/patches/facebook/ads/telemetry/BlockAdTelemetryPatch.kt
+// Upstream patches Facebook at build time; these finders resolve the same anchors at runtime.
+
+/** Kept GraphQL model class: the news feed edge pushed into the feed's collection. */
+private const val FEED_UNIT_EDGE = "com.facebook.graphql.model.GraphQLFeedUnitEdge"
+
+/**
+ * The funnel's known leading parameters: the collection builder first, then the edge. The third
+ * parameter's class is renamed every build and is what broke the previous exact-signature match.
+ */
+private val FEED_FUNNEL_PARAMS = listOf(
+    "com.google.common.collect.ImmutableList\$Builder",
+    FEED_UNIT_EDGE,
+)
+
+/**
+ * The single funnel every news feed edge passes through into the feed's collection.
+ *
+ * Through 582 the work is done by `addNewEdgeToCollection(ImmutableList$Builder,
+ * GraphQLFeedUnitEdge, Object): boolean` itself. On 583 that method is a thin wrapper that hands
+ * the edge, the collection and a category lookup to a static method of its own class, and the
+ * feed's batch add calls that method directly, so the wrapper alone no longer sees every edge;
+ * [feedFunnelBody] follows the wrapper to its body. The third parameter's class is renamed every
+ * build, so the finder pins the name, the return type and the two kept parameter types. The
+ * funnel may live in any dex entry.
+ */
+val feedFunnel = findMethodDirect {
+    val matches = findMethod {
+        matcher {
+            name = "addNewEdgeToCollection"
+            paramCount = 3
+        }
+    }.distinctBy { it.descriptor }.filter { method ->
+        method.returnTypeName == "boolean" &&
+            method.paramTypeNames.take(FEED_FUNNEL_PARAMS.size) == FEED_FUNNEL_PARAMS
+    }
+    check(matches.size == 1) {
+        "expected exactly one addNewEdgeToCollection(ImmutableList\$Builder, GraphQLFeedUnitEdge, *)Z " +
+            "feed funnel, found ${matches.size}"
+    }
+    feedFunnelBody(matches.single()) ?: matches.single()
+}
+
+/**
+ * The static method of the wrapper's own class that is the real funnel, when [funnel] is a 583
+ * wrapper: the wrapper delegates through exactly one static same-class call that takes the edge
+ * and answers a boolean; its other calls (the category lookup, the void logging) answer something
+ * else and are skipped. A funnel that does the work itself (through 582) or one whose shape is
+ * anything else is left as the hook target on its own.
+ */
+private fun DexKitBridge.feedFunnelBody(funnel: MethodData): MethodData? {
+    val delegate = runCatching { funnel.instructions }.getOrNull()
+        ?.mapNotNull { instruction ->
+            if (instruction.opcodeEnum != Opcode.INVOKE_STATIC &&
+                instruction.opcodeEnum != Opcode.INVOKE_STATIC_RANGE
+            ) {
+                return@mapNotNull null
+            }
+            val ref = instruction.methodRef ?: return@mapNotNull null
+            ref.takeIf {
+                it.returnTypeName == "boolean" &&
+                    it.declaredClassName == funnel.declaredClassName &&
+                    it.paramTypeNames.any { type -> type == FEED_UNIT_EDGE }
+            }
+        }
+        ?.distinctBy { it.name to it.paramTypeNames }
+        ?.singleOrNull() ?: return null
+    return findMethod {
+        matcher {
+            name = delegate.name
+            paramTypes(*delegate.paramTypeNames.toTypedArray())
+            returnType = delegate.returnTypeName
+            declaredClass(funnel.declaredClassName)
+        }
+    }.distinctBy { it.descriptor }.singleOrNull()
+}
+
+/** Every method whose body holds exactly [marker]. */
+private fun DexKitBridge.methodsHolding(marker: String): List<MethodData> =
+    findMethod {
+        matcher { usingStrings(listOf(marker), StringMatchType.Equals) }
+    }.distinctBy { it.descriptor }
+
+/**
+ * Methods using all [strings], exact matches preferred over partial ones. Upstream's fingerprints
+ * match `strings` by containment, so a renamed literal such as a "...V2" query still finds the
+ * method; an exact match is tried first so a plain literal pins exactly the method itself.
+ */
+private fun DexKitBridge.methodsUsingAll(strings: List<String>): List<MethodData> {
+    fun query(matchType: StringMatchType) = findMethod {
+        matcher { usingStrings(strings, matchType) }
+    }
+    return query(StringMatchType.Equals).ifEmpty { query(StringMatchType.Contains) }
+}
+
+/**
+ * The Reels and Watch ad pool's vends: the instance methods that answer an object and log
+ * `-WVCDF-NO-AD` when there is no ad to give. No other class holds the literal.
+ */
+val reelsAdPoolVends = findMethodListDirect { methodsHolding("-WVCDF-NO-AD") }
+
+/** The method that runs the Reels tab's video ads fetch: its idle state's own query. */
+val reelsVideoAdsFetch = findMethodListDirect { methodsUsingAll(listOf("FBFetchReelsVideoAdsQuery")) }
+
+/** The method that runs the in-stream (video) ad break fetch, which also logs its start. */
+val instreamBreakFetch = findMethodListDirect {
+    methodsUsingAll(listOf("InstreamExtendedBreakQuery", "Kicking off extended breaks fetch"))
+}
+
+/** The method that runs the profile reels ads fetch, a void instance method that returns early on its own. */
+val profileReelsAdsFetch = findMethodListDirect { methodsUsingAll(listOf("ProfileReelsAsyncAdsQuery")) }
+
+/**
+ * The one void method each advertising-ID send marker picks, from upstream's AD_ID_SENDERS:
+ * a void method loading exactly the string reports that advertising ID.
+ */
+val advertiserIdReportSender = findMethodListDirect { methodsHolding("ReportAdvertiserIDMutation") }
+val launchCustomDataSender = findMethodListDirect { methodsHolding("fb4a_launch_custom_data") }
+val privacySandboxRegisterSender = findMethodListDirect {
+    methodsHolding("https://www.facebook.com/privacy_sandbox/mobile/register/source?tracking_data=")
+}
+val newInstallSender = findMethodListDirect { methodsHolding("app_new_install") }
+
+// The client-side ad splices and the shared ad-break fetch, the other sponsored-reel anchors of
+// upstream's sponsoredreels/Fingerprints.kt. Each splice is a void method that does nothing but
+// insert an ad and tell the controller its data changed; upstream blocks all four, but its POE
+// render task holds no string literal and cannot be anchored at runtime, so three resolve here.
+
+/** The page-of-ads splice of the Reels and Watch item list. */
+val insertAdsSplice = findMethodListDirect {
+    methodsUsingAll(listOf("VideoHomeDataControllerImpl.maybeInsertAds"))
+}
+
+/** The insert of an ad fetched in response to what the viewer just did. */
+val realtimeIntentAdInsert = findMethodListDirect {
+    methodsUsingAll(listOf("VideoHomeDataControllerAdsUtil.maybeInsertFbShortsRealtimeIntentItem"))
+}
+
+/** The SFD ad insert task. */
+val sfdAdInsert = findMethodListDirect {
+    methodsUsingAll(listOf("VideoHomeDataControllerSfdAdsUtil"))
+}
+
+/** "Kicking off banner ads fetch", "Kicking off video ad fetch". */
+private const val BANNER_FETCH_LOG = "Kicking off banner ads fetch"
+private const val VIDEO_FETCH_LOG = "Kicking off video ad fetch"
+private const val LISTENABLE_FUTURE = "com.google.common.util.concurrent.ListenableFuture"
+private const val DEFERRED_CARD_STATE = "UnresolvedWithDeferredCardState"
+
+/**
+ * The shared ad-break fetch: void, and the only method logging both literals. It logs each one
+ * right after starting that kind of query, so the last future-returning call before a literal is
+ * the query helper the log reports.
+ */
+val adBreakFetch = findMethodDirect {
+    val matches = findMethod {
+        matcher { usingStrings(listOf(BANNER_FETCH_LOG, VIDEO_FETCH_LOG), StringMatchType.Contains) }
+    }.filter { it.returnTypeName == "void" }.distinctBy { it.descriptor }
+    check(matches.size == 1) { "expected exactly one ad-break fetch logging both literals, found ${matches.size}" }
+    matches.single()
+}
+
+/** The banner query helper: all banner requests go through it. */
+val adBreakBannerFetch = findMethodDirect {
+    val instructions = adBreakFetch().instructions
+    val bannerIndex = instructions.indexOfFirst { it.string == BANNER_FETCH_LOG }
+    check(bannerIndex >= 0) { "\"$BANNER_FETCH_LOG\" is not in the ad-break fetch" }
+    val ref = instructions.take(bannerIndex).mapNotNull { it.methodRef }
+        .lastOrNull { it.returnTypeName == LISTENABLE_FUTURE }
+        ?: throw IllegalStateException("the ad-break fetch makes no call returning a future before \"$BANNER_FETCH_LOG\"")
+    val signatures = findMethod {
+        matcher {
+            name = ref.name
+            paramTypes(*ref.paramTypeNames.toTypedArray())
+            returnType = ref.returnTypeName
+        }
+    }
+    val onClass = signatures.filter { it.declaredClassName == ref.declaredClassName }
+    (if (onClass.size == 1) onClass else signatures).single()
+}
+
+/** Every future-returning method of the ad-break server API class: its video ad queries. */
+val adBreakVideoFetches = findMethodListDirect {
+    val instructions = adBreakFetch().instructions
+    val videoIndex = instructions.indexOfFirst { it.string == VIDEO_FETCH_LOG }
+    check(videoIndex >= 0) { "\"$VIDEO_FETCH_LOG\" is not in the ad-break fetch" }
+    val ref = instructions.take(videoIndex).mapNotNull { it.methodRef }
+        .lastOrNull { it.returnTypeName == LISTENABLE_FUTURE }
+        ?: throw IllegalStateException("the ad-break fetch makes no call returning a future before \"$VIDEO_FETCH_LOG\"")
+    val fetcher = getClassData(ref.declaredClassName)
+        ?: throw IllegalStateException("the ad-break video fetcher class ${ref.declaredClassName} was not found")
+    val fetches = fetcher.methods.filter { it.returnTypeName == LISTENABLE_FUTURE }
+    check(fetches.isNotEmpty()) { "${fetcher.name} has no method returning a future" }
+    fetches
+}
+
+/**
+ * The Reels ads state whose ad-break lookup keeps retrying. The current builds name every state
+ * from one method on the abstract base, by `instance-of`, so the state is the type tested just
+ * before the literal; a build that names states any other way stops this finder rather than
+ * letting it answer -1 for a sibling state too.
+ */
+val deferredCardState = findClassDirect {
+    val nameMethod = findMethod {
+        matcher {
+            usingStrings(listOf(DEFERRED_CARD_STATE), StringMatchType.Equals)
+            returnType = "java.lang.String"
+            paramCount = 0
+        }
+    }.distinctBy { it.descriptor }.single()
+    val instructions = nameMethod.instructions
+    val literal = instructions.indexOfFirst { it.string == DEFERRED_CARD_STATE }
+    check(literal >= 0) { "\"$DEFERRED_CARD_STATE\" is not in ${nameMethod.declaredClassName}->${nameMethod.name}" }
+    (maxOf(0, literal - 3) until literal).reversed().firstNotNullOfOrNull { index ->
+        instructions[index].takeIf { it.opcodeEnum == Opcode.INSTANCE_OF }?.classRef
+    } ?: throw IllegalStateException("no instance-of tests \"$DEFERRED_CARD_STATE\" before its literal")
+}

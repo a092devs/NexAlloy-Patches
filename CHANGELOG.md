@@ -5,7 +5,22 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 3.2.0
+
+- `NexFusion` 3.2.0:
+  * Renamed the custom `a092devs` bundle to `NexFusion Patches` (`nexfusion.nxb`, `io.github.nexalloy.patches.nexfusion`).
+  * Initiated coordinated versioning series `3.2` matching NexAlloyNext manager `3.2.0`.
+  * Added compatibility series (`3.2`) and minimum manager version (`3.2.0`) metadata for semantic compatibility validation in the manager app.
+  * Preserved full support for all existing patch collections and ported features:
+    - Instagram (`com.instagram.android` 451.0.0.53.80, 450.0.0.46.79, 447.0.0.55.81): ad & suggestion blocking, ad injector guard, in-app download dialog with custom folders, per-username subfolders, timestamp filenames, DASH audio extraction, ghost story/live viewing, story auto-advance hold, typing status suppression, double-tap like suppression.
+    - Spotify (`com.spotify.music`): audio ad muting, ad view & upsell banner suppression, Premium tab hiding, launcher widgets fix, link sanitizer, Material You theme, custom rounded corners.
+    - Reddit (`com.reddit.frontpage`): screenshot banner disable, direct links, home-feed auto-refresh disable, transparent navigation bar, upvote score hiding, post view count hiding.
+    - Discord (`com.discord` 348.10): crash reporting, telemetry and touch logging, install attribution, advertising identifiers blocking, and system typeface font forcing.
+    - X / Twitter (`com.twitter.android` 12.35.0-prod.01): promoted post removal, video downloads unlock, update screen block, telemetry blackholing, premium upsell removal.
+    - Gboard, LinkedIn, MiXplorer, and Proton VPN ports maintained with full functionality.
+
 ## 2.13.0
+
 
 - `a092devs` 1.8.2:
   * Instagram (`com.instagram.android` 451.0.0.53.80): added custom download folder configuration,

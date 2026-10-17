@@ -17,6 +17,9 @@ plugins {
 val bundleConfig: NexAlloyBundleExtension = extensions.create<NexAlloyBundleExtension>("nexalloyBundle")
 bundleConfig.author.convention("")
 bundleConfig.descriptionResource.convention("")
+bundleConfig.compatibilitySeries.convention("")
+bundleConfig.minManagerVersion.convention("")
+bundleConfig.maxManagerVersion.convention("")
 
 val patcherApiVersion = providers.gradleProperty("patcherApiVersion").orElse("1")
 
@@ -66,6 +69,9 @@ extensions.configure<ApplicationAndroidComponentsExtension> {
             "nexalloyBundleDescription",
             bundleConfig.descriptionResource.map { if (it.isEmpty()) "" else "@string/$it" }
         )
+        variant.manifestPlaceholders.put("nexalloyCompatibilitySeries", bundleConfig.compatibilitySeries)
+        variant.manifestPlaceholders.put("nexalloyMinManagerVersion", bundleConfig.minManagerVersion)
+        variant.manifestPlaceholders.put("nexalloyMaxManagerVersion", bundleConfig.maxManagerVersion)
     }
 }
 

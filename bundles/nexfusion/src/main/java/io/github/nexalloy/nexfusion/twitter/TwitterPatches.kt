@@ -1,0 +1,306 @@
+package io.github.nexalloy.nexfusion.twitter
+
+import de.robv.android.xposed.XposedHelpers
+import io.github.nexalloy.HookDsl
+import io.github.nexalloy.IHook
+import io.github.nexalloy.IHookCallback
+import io.github.nexalloy.PatcherLog
+import io.github.nexalloy.patch
+
+// Ported from kveld9/kveld-extra-morphe-patches (GPL-3.0),
+// patches/src/main/kotlin/app/morphe/patches/twitter/ - the upstream patches rewrite smali at build
+// time against X 12.34.0-prod.01; this bundle installs equivalent runtime hooks against
+// X 12.35.0-prod.01 (com.twitter.android).
+//
+// Not ported, with reasons: the upstream manifest and resource edits (permission strips, component
+// disables, Sentry metadata removal) have no runtime equivalent. The Timeline UI, Post & Profile UI,
+// Drawer Items, deep-link, share-link, font and other UI patches are separate upstream patches that
+// this port does not cover yet.
+
+val TwitterRemoveAds = patch(
+    name = "Remove Ads",
+    description = "Removes promoted posts, trends, and ads from timeline feeds.",
+) {
+    installTwitterAdSuppressor()
+}
+
+val TwitterUnlockVideoDownloads = patch(
+    name = "Unlock Video Downloads",
+    description = "Lets you save videos and GIFs with the app's built-in download option without Premium.",
+) {
+    installVideoDownloadUnlock()
+}
+
+val TwitterBlockUpdateScreen = patch(
+    name = "Block Update Screen",
+    description = "Blocks the outdated app screen and suppresses in-app update prompts on launch.",
+) {
+    installUpdateScreenBlock()
+}
+
+val TwitterBlockTelemetry = patch(
+    name = "Block Telemetry & Trackers",
+    description = "Redirects Braze, Sentry, Google Ads, Crashlytics and Firebase Analytics endpoints " +
+        "to a blackhole address and drops Firebase Performance traces.",
+) {
+    installTelemetryFilters()
+}
+
+val TwitterRemovePremiumUpsell = patch(
+    name = "Remove Premium Upsell",
+    description = "Removes Premium subscription prompts and verification upsell surfaces across the app.",
+) {
+    neutralizeTwitterFlags(
+        "subscriptions_upsells_premium_home_nav_enabled",
+        "subscriptions_upsells_premium_home_nav_offer_enabled",
+    )
+    installProfileUpsellDisabler()
+}
+
+val TwitterControlVideoAutoScroll = patch(
+    name = "Control Video Auto Scroll",
+    description = "Prevents automatic scrolling to the next video in immersive view.",
+    use = false,
+) {
+    installAutoScrollDisabler()
+}
+
+val TwitterDmDebloat = patch(
+    name = "DM Debloat",
+    description = "Hides call buttons in direct message conversations (disables outgoing DM calls).",
+    use = false,
+) {
+    installDmCallButtonHider()
+}
+
+val TwitterPauseSearchSuggestions = patch(
+    name = "Pause Search Suggestions",
+    description = "Stops persisting search suggestions locally without breaking search.",
+    use = false,
+) {
+    installSearchSuggestionsPauser()
+}
+
+val TwitterShowSensitiveMedia = patch(
+    name = "Show Sensitive Media",
+    description = "Displays sensitive media directly without requiring tap to reveal.",
+    use = false,
+) {
+    installSensitiveMediaDisabler()
+}
+
+val TwitterPatches = arrayOf(
+    TwitterRemoveAds,
+    TwitterUnlockVideoDownloads,
+    TwitterBlockUpdateScreen,
+    TwitterBlockTelemetry,
+    TwitterRemovePremiumUpsell,
+    TwitterControlVideoAutoScroll,
+    TwitterDmDebloat,
+    TwitterPauseSearchSuggestions,
+    TwitterShowSensitiveMedia,
+)
+
+// ---- Remove Ads ---------------------------------------------------------------------------------
+
+/** X 12.35's unified presenter funnel; every feed resolves item presenters through it. */
+private const val PRESENTER_FUNNEL_DESCRIPTOR =
+    "Lcom/x/urt/b;->a:(ILcom/x/models/timelines/items/o0;Lcom/x/navigation/in;" +
+        "Lcom/x/repositories/urt/r1;Lcom/x/urt/x0;)Lcom/x/presenter/a;"
+
+/** The Quick Promote tray composable the upstream patch drops. */
+private const val QUICK_PROMOTE_DESCRIPTOR =
+    "Lcom/x/urt/items/post/quickpromote/b;->a:(Lkotlin/jvm/functions/Function0;" +
+        "Lkotlin/jvm/functions/Function0;Lcom/x/quickpromote/j0;Landroidx/compose/runtime/Composer;I)V"
+
+/** The Google Mobile Ads initializer coroutine the upstream patch fails early. */
+private const val MOBILE_ADS_INIT_DESCRIPTOR =
+    "Lcom/x/googlessp/init/b;->a:(Lkotlin/coroutines/jvm/internal/ContinuationImpl;)Ljava/lang/Object;"
+
+private fun IHook.installTwitterAdSuppressor() {
+    val filter = TwitterAdFilter(classLoader)
+    val missing = filter.missingProbeClasses()
+    if (missing.isNotEmpty()) {
+        PatcherLog.info { "NexFusion: X promoted-item probes not found in this build: ${missing.joinToString()}" }
+    }
+    hookCatching(PRESENTER_FUNNEL_DESCRIPTOR) {
+        before = { param ->
+            val item = param.args.getOrNull(1)
+            if (item != null && filter.isPromoted(item)) {
+                val presenter = filter.emptyPresenter()
+                if (presenter != null) param.result = presenter
+            }
+        }
+    }
+    hookCatching(QUICK_PROMOTE_DESCRIPTOR) {
+        before = { param -> param.result = null }
+    }
+    hookCatching(MOBILE_ADS_INIT_DESCRIPTOR) {
+        before = { param -> param.result = java.lang.Boolean.FALSE }
+    }
+}
+
+// ---- Unlock Video Downloads ---------------------------------------------------------------------
+
+private fun IHook.installVideoDownloadUnlock() {
+    // Upstream forces the Premium check (com.x.subscriptions.q.g) to true inside the three download
+    // call sites; the gate marks those methods, so the override only applies while a download
+    // surface builds.
+    val siteBlock: HookDsl<IHookCallback>.() -> Unit = {
+        before = { TwitterDownloadGate.enterSite() }
+        after = { TwitterDownloadGate.exitSite() }
+    }
+    hookMethodsIfExists(
+        "com.x.media.n", "b", "media viewer download",
+        shape = { it.size == 1 && it[0].name == "com.x.models.a5" }, block = siteBlock,
+    )
+    hookMethodsIfExists(
+        "com.x.urt.items.post.k5", "invoke", "post menu download",
+        shape = { it.isEmpty() }, block = siteBlock,
+    )
+    hookMethodsIfExists(
+        "com.x.video.tab.d0", "e", "video tab download",
+        shape = { it.size == 1 && it[0].name == "com.x.video.tab.f5" }, block = siteBlock,
+    )
+
+    hookCatching("Lcom/x/subscriptions/q;->g:()Z") {
+        after = { param ->
+            if (param.result == false && TwitterDownloadGate.isInsideSite()) param.result = true
+        }
+    }
+
+    // The media models gate the save action on their own isDownloadable flag; upstream forces it on
+    // in every constructor return path.
+    installDownloadableFlag("com.x.models.w4", "j", "video")
+    installDownloadableFlag("com.x.models.q4", "g", "GIF")
+}
+
+private fun IHook.installDownloadableFlag(className: String, fieldName: String, label: String) {
+    var warned = false
+    hookAllConstructorsIfExists(className, "$label isDownloadable") {
+        after = { param ->
+            val media = param.thisObject
+            if (media != null) {
+                runCatching { XposedHelpers.setBooleanField(media, fieldName, true) }
+                    .onFailure { error ->
+                        if (!warned) {
+                            warned = true
+                            PatcherLog.info(error) { "NexFusion: could not force the $label isDownloadable flag" }
+                        }
+                    }
+            }
+        }
+    }
+}
+
+// ---- Block Update Screen ------------------------------------------------------------------------
+
+/** The outdated-screen gate returning Unit when updates are allowed. */
+private const val BLOCKING_UPDATE_DESCRIPTOR =
+    "Lcom/apollo/n;->invokeSuspend:(Ljava/lang/Object;)Ljava/lang/Object;"
+
+/** The in-app update prompt call the upstream patch turns into a no-op. */
+private const val IN_APP_UPDATE_DESCRIPTOR = "Lcom/x/android/appupdate/f;->a:(Lcom/x/android/appupdate/o;)V"
+
+private fun IHook.installUpdateScreenBlock() {
+    val unit = appUnit()
+    if (unit == null) {
+        PatcherLog.info { "NexFusion: kotlin.Unit unavailable; the outdated app screen cannot be stubbed" }
+    } else {
+        hookCatching(BLOCKING_UPDATE_DESCRIPTOR) {
+            before = { param -> param.result = unit }
+        }
+    }
+    hookCatching(IN_APP_UPDATE_DESCRIPTOR) {
+        before = { param -> param.result = null }
+    }
+}
+
+// ---- Remove Premium Upsell ----------------------------------------------------------------------
+
+private fun IHook.installProfileUpsellDisabler() {
+    // Upstream pins the two trailing boolean constructor parameters of the profile upsell holder
+    // (com.x.profile.upsell.k, ctor (ZZZ)V); the (IZ)V synthetic funnels into it.
+    hookAllConstructorsIfExists("com.x.profile.upsell.k", "profile upsell") {
+        before = { param ->
+            val types = param.parameterTypes
+            if (types.size == 3 && types.all { it == Boolean::class.javaPrimitiveType }) {
+                param.args[1] = false
+                param.args[2] = false
+            }
+        }
+    }
+}
+
+// ---- Control Video Auto Scroll ------------------------------------------------------------------
+
+private fun IHook.installAutoScrollDisabler() {
+    // PersistentVideoSettings (com.x.media.playback.settings.persistent.h): the constructor stores
+    // its first four boolean parameters into fields a..d; c is isAutoAdvanceEnabled, i.e. args[2].
+    hookAllConstructorsIfExists("com.x.media.playback.settings.persistent.h", "video auto scroll") {
+        before = { param ->
+            val types = param.parameterTypes
+            if (types.size == 7 && (0 until 4).all { types[it] == Boolean::class.javaPrimitiveType }) {
+                param.args[2] = false
+            }
+        }
+    }
+}
+
+// ---- DM Debloat ---------------------------------------------------------------------------------
+
+private fun IHook.installDmCallButtonHider() {
+    // Upstream pins the show-calls boolean (2nd parameter) of the DM chat composable to false.
+    hookMethodsIfExists(
+        "com.x.dm.chat.composables.r0",
+        "d",
+        "DM call buttons",
+        shape = {
+            it.size == 7 && it[0].name == "com.x.dms.components.chat.v4" &&
+                it[1] == Boolean::class.javaPrimitiveType
+        },
+    ) {
+        before = { param -> param.args[1] = false }
+    }
+}
+
+// ---- Pause Search Suggestions -------------------------------------------------------------------
+
+/** The recent-search persist suspend body (fingerprinted by "search_recent_v3" upstream). */
+private const val SEARCH_PERSIST_DESCRIPTOR =
+    "Lcom/x/repositories/search/p;->c:(Lcom/x/models/search/r;" +
+        "Lkotlin/coroutines/jvm/internal/SuspendLambda;)Ljava/lang/Object;"
+
+private fun IHook.installSearchSuggestionsPauser() {
+    // Upstream returns kotlin.Unit at method entry of the persist call, so search still completes
+    // without writing the suggestion store.
+    val unit = appUnit()
+    if (unit == null) {
+        PatcherLog.info { "NexFusion: kotlin.Unit unavailable; search suggestions cannot be paused" }
+    } else {
+        hookCatching(SEARCH_PERSIST_DESCRIPTOR) {
+            before = { param -> param.result = unit }
+        }
+    }
+}
+
+// ---- Show Sensitive Media -----------------------------------------------------------------------
+
+/** X 12.35's media visibility wrapper; its blur field (a) is left null by the upstream patch. */
+private const val BLUR_WRAPPER_CLASS = "com.x.models.interstitial.h"
+
+/** The blur interstitial type the wrapper stores in field a. */
+private const val BLUR_INTERSTITIAL_CLASS = "com.x.models.interstitial.e"
+
+private fun IHook.installSensitiveMediaDisabler() {
+    // Upstream returns from every constructor right after the super call, so the blur field keeps
+    // its null default. Runtime equivalent: null the blur constructor argument before it is stored.
+    hookAllConstructorsIfExists(BLUR_WRAPPER_CLASS, "sensitive media blur") {
+        before = { param ->
+            val types = param.parameterTypes
+            for (index in param.args.indices) {
+                if (types.getOrNull(index)?.name == BLUR_INTERSTITIAL_CLASS) param.args[index] = null
+            }
+        }
+    }
+}

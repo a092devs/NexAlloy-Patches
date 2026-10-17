@@ -16,4 +16,15 @@ interface NexAlloyBundleExtension {
      * collides with an installed bundle.
      */
     val resourcePackageId: Property<Int>
+
+    /**
+     * Compatibility series (e.g. "3.2"). The manager checks this against its own major.minor series.
+     */
+    val compatibilitySeries: Property<String>
+
+    /** Minimum compatible manager app version (e.g. "3.2.0"). */
+    val minManagerVersion: Property<String>
+
+    /** Maximum compatible manager app version, or empty if unbounded. */
+    val maxManagerVersion: Property<String>
 }

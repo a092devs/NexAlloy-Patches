@@ -1,0 +1,88 @@
+package io.github.nexalloy.nexfusion.twitter
+
+import de.robv.android.xposed.XposedHelpers
+import io.github.nexalloy.PatcherLog
+
+// Ported from kveld9/kveld-extra-morphe-patches (GPL-3.0), TwitterRemoveAdsPatch.kt.
+// Upstream prepends the same promoted-item test to the timeline item presenter and the post detail
+// presenter and returns the empty presenter for suppressed items. This port runs that test as a
+// before-hook on X 12.35's unified presenter funnel (com.x.urt.b.a) and returns the empty presenter
+// singleton when it matches.
+
+/** One promoted-item probe, mirroring a branch of the upstream adItemTestSmali test. */
+internal data class AdProbe(val modelClass: String, val field: String, val call: String? = null)
+
+/** The five promoted shapes the upstream Remove Ads preamble tests, in upstream order. */
+internal val PROMOTED_ITEM_PROBES = listOf(
+    AdProbe("com.x.models.timelines.items.j1", "e"), // promoted post marker
+    AdProbe("com.x.models.timelines.items.m0", "a", call = "a"), // event item verdict
+    AdProbe("com.x.models.timelines.items.y1", "a", call = "b"), // promoted trend verdict
+    AdProbe("com.x.models.timelines.items.p1", "j"), // promoted rtb marker
+    AdProbe("com.x.models.timelines.items.b2", "h"), // promoted user marker
+)
+
+/** Entry-id substring the upstream test checks after the model-shape probes. */
+internal const val PROMOTED_ENTRY_ID = "promoted"
+
+/** X 12.35's no-op presenter singleton (implements com.x.presenter.a, renders nothing). */
+private const val EMPTY_PRESENTER_CLASS = "com.x.urt.f0"
+
+internal class TwitterAdFilter(private val classLoader: ClassLoader) {
+    private val models = HashMap<String, Class<*>?>()
+    private val warnedReads = HashSet<String>()
+    private var emptyPresenter: Any? = null
+    private var emptyPresenterResolved = false
+
+    @Synchronized
+    private fun model(name: String): Class<*>? {
+        if (models.containsKey(name)) return models[name]
+        return XposedHelpers.findClassIfExists(name, classLoader).also { models[name] = it }
+    }
+
+    /** True when the upstream Remove Ads test would suppress this item. */
+    fun isPromoted(item: Any?): Boolean {
+        if (item == null) return false
+        for (probe in PROMOTED_ITEM_PROBES) {
+            val type = model(probe.modelClass) ?: continue
+            if (!type.isInstance(item)) continue
+            if (readMarker(item, probe) != null) return true
+        }
+        val entryId = runCatching { XposedHelpers.callMethod(item, "c") as? String }.getOrNull()
+        return entryId?.contains(PROMOTED_ENTRY_ID) == true
+    }
+
+    private fun readMarker(item: Any, probe: AdProbe): Any? {
+        val holder = runCatching { XposedHelpers.getObjectField(item, probe.field) }
+            .onFailure {
+                synchronized(warnedReads) {
+                    if (warnedReads.add("${probe.modelClass}.${probe.field}")) {
+                        PatcherLog.info(it) {
+                            "NexFusion: X promoted-item probe read failed: ${probe.modelClass}.${probe.field}"
+                        }
+                    }
+                }
+            }
+            .getOrNull() ?: return null
+        if (probe.call == null) return holder
+        return runCatching { XposedHelpers.callMethod(holder, probe.call) }.getOrNull()
+    }
+
+    /** The empty presenter singleton; null when this build renames it (items then stay visible). */
+    @Synchronized
+    fun emptyPresenter(): Any? {
+        if (!emptyPresenterResolved) {
+            emptyPresenterResolved = true
+            emptyPresenter = runCatching {
+                XposedHelpers.getStaticObjectField(classLoader.loadClass(EMPTY_PRESENTER_CLASS), "a")
+            }.onFailure {
+                PatcherLog.info(it) { "NexFusion: X empty presenter not found; suppressed items stay visible" }
+            }.getOrNull()
+        }
+        return emptyPresenter
+    }
+
+    /** Probe classes missing from this build, for one install-time log line. */
+    @Synchronized
+    fun missingProbeClasses(): List<String> =
+        PROMOTED_ITEM_PROBES.map { it.modelClass }.distinct().filter { model(it) == null }
+}

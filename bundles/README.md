@@ -15,6 +15,10 @@ them in from the `nexalloyBundle { … }` block:
 | `nexalloy.bundle.apiVersion` | `patcherApiVersion` (default `1`) | Patcher API version the bundle was built against |
 | `nexalloy.bundle.author` | `author` | Author shown in the NexAlloy manager |
 | `nexalloy.bundle.description` | `descriptionResource` | String resource describing the bundle |
+| `nexalloy.bundle.compatibilitySeries` | `compatibilitySeries` | Compatible manager compatibility series (e.g. `3.2`) |
+| `nexalloy.bundle.minManagerVersion` | `minManagerVersion` | Minimum required manager version (e.g. `3.2.0`) |
+| `nexalloy.bundle.maxManagerVersion` | `maxManagerVersion` | Maximum supported manager version |
+
 
 ## Creating a bundle
 

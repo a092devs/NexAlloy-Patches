@@ -28,6 +28,9 @@ A `.nxb` file is a regular signed APK renamed at packaging time. NexAlloyNext re
 | `nexalloy.bundle.apiVersion` | Patcher API version the bundle was built against |
 | `nexalloy.bundle.author` | Author shown in the NexAlloy manager |
 | `nexalloy.bundle.description` | String resource describing the bundle |
+| `nexalloy.bundle.compatibilitySeries` | Compatible manager compatibility series (e.g. `3.2`) |
+| `nexalloy.bundle.minManagerVersion` | Minimum required manager version (e.g. `3.2.0`) |
+| `nexalloy.bundle.maxManagerVersion` | Maximum supported manager version (or empty) |
 
 The entry point lists every supported app with its package identifier and the versions the
 patches were last verified against (`AppPatchInfo.targets`). The manager's compatibility engine
@@ -54,10 +57,11 @@ Core streaming, media, and productivity runtime patches.
 | **Reddit** | `com.reddit.frontpage` | Feed ad removal, comment ad state bypass, tracking link sanitizer |
 | **Google Photos** | `com.google.android.apps.photos` | Spoof Pixel XL features (enables unlimited original-quality cloud storage), DCIM folder backup control |
 
-### 2. a092devs Patches (`a092devs-*.nxb`)
-Community-ported privacy, sharing and Spotify customization patches kept under the `a092devs`
+### 2. NexFusion Patches (`nexfusion.nxb`)
+Community-ported privacy, sharing, and customization patches unified under the `NexFusion`
 identity, with per-patch attribution in
-[bundles/a092devs/.../NOTICE](bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/NOTICE).
+[bundles/nexfusion/.../NOTICE](bundles/nexfusion/src/main/java/io/github/nexalloy/nexfusion/NOTICE).
+
 
 | Target Application | Package Identifier | Key Patch Capabilities |
 |---|---|---|
