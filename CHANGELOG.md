@@ -5,20 +5,6 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
-## 2.14.0
-
-- `a092devs` 1.8.3:
-  * Instagram (`com.instagram.android` 451.0.0.53.80): added 9 requested feature patches ported from HushGram:
-    - `View DM photos and videos anonymously`: suppresses the "Opened" notice for view-once photos and videos in direct messages, completing the receipt locally without sending it to Meta.
-    - `Turn off HDR brightness boosts`: prevents blinding HDR brightness on photos, reels, and video playback by overriding display headroom and setting default window color mode.
-    - `Upload stories at full quality`: forces high quality media upload transcode settings for story video uploads, providing 1080p resolution at 9 Mbps bitrate instead of 720p.
-    - `Tap a feed video to pause it`: tapping a video in the home feed toggles playback pause and resume in place instead of launching the Reels viewer.
-    - `Show if a profile follows you`: displays a relationship indicator ("Follows you", "Doesn't follow you", or "Following each other") beside usernames on profile headers.
-    - `See who a story mentions`: shows a mention badge in story viewer indicating the number of mentioned accounts, and displays an interactive dialog list on tap.
-    - `Show a post's exact time`: formats relative post and comment timestamps (like "3h") into exact dates and times (like "Oct 2, 3:45 PM").
-    - `Save profile picture`: enables options to view full-resolution profile pictures and download them directly from the profile screen.
-    - `Open developer options`: long-pressing the Home tab opens Instagram's hidden internal developer options and MobileConfig experiments.
-
 ## 2.13.0
 
 - `a092devs` 1.8.2:
