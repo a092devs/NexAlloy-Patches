@@ -7,8 +7,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.nexalloy.patches.a092devs"
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 9
+        versionName = "1.7.0"
     }
 }
 

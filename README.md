@@ -54,15 +54,7 @@ Core streaming, media, and productivity runtime patches.
 | **Reddit** | `com.reddit.frontpage` | Feed ad removal, comment ad state bypass, tracking link sanitizer |
 | **Google Photos** | `com.google.android.apps.photos` | Spoof Pixel XL features (enables unlimited original-quality cloud storage), DCIM folder backup control |
 
-### 2. Piko Patches (`piko-*.nxb`)
-Privacy, media downloading, and social timeline enhancements.
-
-| Target Application | Package Identifier | Key Patch Capabilities |
-|---|---|---|
-| **Instagram** | `com.instagram.android` | Ad and sponsored content blocking, direct media downloader, ghost/anonymous story viewing, disable typing indicators, strip link tracking |
-| **X (Twitter)** | `com.twitter.android` | Hide timeline ads, remove promoted trends/who to follow, direct media downloading, uncensor sensitive content, strip `t.co` tracking parameters |
-
-### 3. 2eno Patches (`2eno-*.nxb`)
+### 2. 2eno Patches (`2eno-*.nxb`)
 Audio and social client customizations.
 
 | Target Application | Package Identifier | Key Patch Capabilities |
@@ -70,7 +62,7 @@ Audio and social client customizations.
 | **Spotify** | `com.spotify.music` | Audio ad muting, hide ad views/video banners, hide Premium navigation tab, Dynamic Material You theme, custom rounded corners, tracking link cleaner |
 | **Instagram** | `com.instagram.android` | Stealth follow (view public profiles without triggering follow events) |
 
-### 4. a092devs Patches (`a092devs-*.nxb`)
+### 3. a092devs Patches (`a092devs-*.nxb`)
 Community-ported privacy and sharing patches kept under the `a092devs` identity, with per-patch
 attribution in [bundles/a092devs/.../NOTICE](bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/NOTICE).
 
@@ -79,10 +71,12 @@ attribution in [bundles/a092devs/.../NOTICE](bundles/a092devs/src/main/java/io/g
 | **Discord** | `com.discord` | Disable crash reporting, telemetry and touch logging, install attribution, advertising identifiers (native entry points from Venus-Patches) |
 | **Facebook** | `com.facebook.katana` | Allow screenshots and block screenshot detection (Hushfacebook ports) |
 | **Gboard** | `com.google.android.inputmethod.latin` | Dynamic Phenotype flag detection + SharedPreferences hook for rounded keycaps, AI writing tools, scan text OCR, screenshot chips, emoji palette v2, smart compose, spellchecker suggestion chips, cursor trackpad, and more (PixelBoard & jasonwu1994 ports) |
+| **Instagram** | `com.instagram.android` | Download menu options (post, reels, story, highlight, profile picture), request rules for suggested posts, story-seen and live-viewer analytics, anonymous story/live viewing, screenshot support, link sanitizer (HushGram & Piko ports) |
 | **LinkedIn** | `com.linkedin.android` | Sanitize share links (copy/share paths), open `safety/go` links directly, block tracking (off by default) |
 | **MiXplorer** | `com.mixplorer` | Fix scoped-storage file sharing: hide unreadable `_data` paths from other apps on Android 11+ |
 | **Proton VPN** | `ch.protonvpn.android` | Disable telemetry and observability workers, suppress upgrade prompts, unlock NetShield UI availability (Paresh-Patches port) |
 | **Reddit** | `com.reddit.frontpage` | Screenshot-banner, link, refresh, redirect, navigation-bar, upvote-score and view-count ports (adobo) |
+| **X** | `com.twitter.android` | Promoted-post removal (presenter funnel, Quick Promote, Google ads initializer), video/GIF download unlock, outdated-screen and in-app update block, telemetry/tracker blackholing, premium upsell removal, four optional controls (kveld9 ports) |
 
 
 ---

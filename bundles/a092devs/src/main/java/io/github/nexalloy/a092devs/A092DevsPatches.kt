@@ -11,6 +11,7 @@ import io.github.nexalloy.a092devs.linkedin.LinkedInPatches
 import io.github.nexalloy.a092devs.mixplorer.MixplorerPatches
 import io.github.nexalloy.a092devs.protonvpn.ProtonVpnPatches
 import io.github.nexalloy.a092devs.reddit.RedditPatches
+import io.github.nexalloy.a092devs.twitter.TwitterPatches
 
 /** Entry point of the a092devs Patches bundle, named in its manifest. */
 object A092DevsPatches : PatchBundle {
@@ -84,6 +85,13 @@ object A092DevsPatches : PatchBundle {
                 AppTarget("2026.14.0"),
             ),
             appIconColor = 0xFF4500,
+        ),
+        AppPatchInfo(
+            appName = "X",
+            packageName = "com.twitter.android",
+            patches = TwitterPatches,
+            targets = listOf(AppTarget("12.35.0-prod.01")),
+            appIconColor = 0x000000,
         ),
     )
 }

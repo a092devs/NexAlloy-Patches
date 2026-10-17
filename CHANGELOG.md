@@ -5,6 +5,49 @@ automatically on every push to `main` for the version of the first `X.Y.Z` secti
 version has no release yet. The section matching the release tag becomes the release notes,
 falling back to generated commit notes when no section exists.
 
+## 2.10.0
+
+- The `piko` bundle is removed: it carried only the X hooks for `12.19.1-release.0`, which no longer
+  match the maintained X builds, and its Instagram side had already moved to `a092devs` in 2.6.0.
+  X coverage is superseded by the kveld9 port in `a092devs` 1.7.0 (`12.35.0-prod.01`). The Piko
+  NOTICE is retained verbatim as
+  `bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/NOTICE-piko` (the `a092devs` NOTICE
+  now points there), so the upstream attribution requirement survives the removal.
+- Docs updated for the removal: the README bundle list, the DEVELOPMENT module tree and the
+  installed-app audit now credit `a092devs` for Instagram and X instead of the removed bundle.
+
+## 2.9.0
+
+- `a092devs` 1.7.0:
+  * X (`com.twitter.android` 12.35.0-prod.01): new app entry with nine runtime ports of
+    `kveld9/kveld-extra-morphe-patches` — `Remove Ads`, `Unlock Video Downloads`,
+    `Block Update Screen`, `Block Telemetry & Trackers`, `Remove Premium Upsell`,
+    `Control Video Auto Scroll`, `DM Debloat`, `Pause Search Suggestions` and
+    `Show Sensitive Media`. Per-patch defaults mirror upstream (first five enabled, last four off).
+    The upstream manifest and resource edits (permission strips, component disables, Sentry metadata
+    removal) have no runtime equivalent and are not ported.
+  * NOTICE: adds the `kveld9/kveld-extra-morphe-patches` (GPL-3.0) section covering the X port.
+
+## 2.8.1
+
+- `a092devs` 1.6.1:
+  * JioHotstar (`in.startv.hotstar`): the 2.8.0 runtime port has been withdrawn — the patches did not take effect when applied on the device, so the whole port is removed from the bundle: the patch and fingerprint sources, the tests, the app entry and the `durgesh0505/chiggi_morphe_patches` NOTICE section. The 2.8.0 release notes keep the record of what was attempted.
+
+## 2.8.0
+
+- `a092devs` 1.6.0:
+  * Facebook (`com.facebook.katana`): the feed funnel now survives the 583 wrapper/body split. The finder pins the two kept parameter types instead of the renamed third one, and follows the wrapper to the static body it delegates to, so "Hide sponsored posts" no longer fails at every app start with 583 installed — which was the source of the recurring "Error while applying the following patches" toast. The hook reads the edge from whichever argument holds it.
+  * JioHotstar (`in.startv.hotstar`): new runtime ports of `durgesh0505/chiggi_morphe_patches` for the phone build (26.09.28.2, keeping the upstream TV build 26.06.22.3 as a target) — premium UI unlock (subscribed state, download buttons, playback nudge suppression), video ad removal (SSAI tag cleared in the AdMetadata constructor so the player requests a clean stream, plus the home-feed banner render stopped), screenshot restriction removal, all-codecs/4K checks and the Dolby Vision/HDR capability check forced on, and the device-attestation blob forced to report a clean device (anchored by its 34-String constructor, which survives the class renames; the blob's own flags were verified against the phone build's parameter names). Every finder carries upstream's access flags and was verified against all thirteen dex entries of the phone build. Not ported, with reasons in the bundle sources: Firebase analytics flags (read before runtime hooks exist), the proxy/VPN verdict bypass (renamed lambda anchors), the device-id spoof and the security-state self-report (renamed anchors), and manifest/resource edits.
+  * NOTICE: adds the `durgesh0505/chiggi_morphe_patches` entry (GPL-3.0, adapting Paresh-Maheshwari's patches).
+
+## 2.7.0
+
+- `a092devs` 1.5.0:
+  * Facebook (`com.facebook.katana`): the feed funnel, the Reels and Watch ad-pool vends, the ad fetches and the telemetry senders are now resolved at runtime with DexKit instead of hooking names that do not exist in release builds. Sponsored reels also cancel the ad-break queries with a failed future, block the anchorable client-side splices, and stop the deferred-card ad-break poller.
+  * Instagram (`com.instagram.android`): the patches now ride on the Tigon request filter and real framework anchors; the direct-message stubs, the log-only patches and the old download stub are gone. The open-links-externally patch anchors on Instagram's own in-app browser, keeps Instagram-family pages and ad links in the app, follows redirect shims and strips only the click id. The download options of the post, sheet, story, highlight and profile-picture menus are restored from this repository's Piko bundle and registered.
+  * NOTICE: adds the piko entry (GPL-3.0, NOTICE retained) and corrects the Hushfacebook and HushGram entries.
+- `2eno`: repaired the Spotify hide-ad-views patch against 9.1.90.2270, which previously hooked names absent from the release build and silently did nothing.
+
 ## 2.6.0
 
 - `a092devs` 1.4.0:

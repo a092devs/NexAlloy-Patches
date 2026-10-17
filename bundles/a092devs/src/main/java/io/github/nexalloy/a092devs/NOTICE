@@ -76,20 +76,45 @@ https://github.com/SysAdminDoc/Hushfacebook
 License: GPL-3.0
 Ported material: Facebook 582.0.0.50.54 and 581.0.0.45.54 — AllowScreenshots and
 BlockScreenshotDetection (patches/src/main/kotlin/app/morphe/patches/facebook/misc/screenshots/),
-HideSponsoredPosts, HideSponsoredReels, HideMarketplaceAds, BlockTelemetry, DownloadMedia, and
-OpenLinksExternally. Clears FLAG_SECURE on Window/PhoneWindow/WindowManagerImpl calls, suppresses
-ScreenshotContentObserver.onChange and Android 14+ screen-capture callbacks, drops sponsored feed
-and story items, filters Marketplace ads, blocks audience network and analytics event sinks, and
-routes external links to the default system browser.
+HideSponsoredPosts, HideSponsoredReels, BlockTelemetry, and OpenLinksExternally. Clears
+FLAG_SECURE on Window/PhoneWindow/WindowManagerImpl calls, suppresses
+ScreenshotContentObserver.onChange and Android 14+ screen-capture callbacks, drops sponsored and
+promotional feed edges at addNewEdgeToCollection, holds the Reels and Watch ad pool and answers the
+reels, ad-break, profile and splice fetches (the ad-break queries with a failed future, as
+upstream), blocks ad telemetry, prefetch jobs and advertising identifier reporting, and routes
+external links to the default system browser. Not ported: "Hide marketplace ads" and "Download any
+media", whose upstream implementations resolve tens of build-specific anchors each, and the Reels
+page filtering and ad-pill hold, which need build-time rewrites of page construction.
 ================================================================================
 SysAdminDoc/HushGram
 https://github.com/SysAdminDoc/HushGram
 License: GPL-3.0
 Ported material: Instagram 451.0.0.53.80, 450.0.0.46.79, and 447.0.0.55.81 — HideAds,
-HideSuggestedPosts, HideReelsAds, ViewStoriesAnonymously, ViewLiveAnonymously, ViewDmsAnonymously,
-DisableTypingStatus, AllowScreenshots, BlockScreenshotDetection, SanitizeShareLinks,
-OpenLinksExternally, DisableAnalytics, DownloadMedia, AskBeforeLike, AskBeforeRefresh,
-DisableVideoAutoplay, RemoveBuildExpiredPopup, and UnlockDeveloperOptions.
+HideSuggestedPosts, HideReelsAds, ViewStoriesAnonymously, ViewLiveAnonymously, AllowScreenshots,
+BlockScreenshotDetection, SanitizeShareLinks, OpenLinksExternally, and DisableAnalytics. The ad,
+suggested, story-seen, live-viewer and analytics rules ride on one runtime filter of
+TigonServiceLayer.startRequest; the screenshot, share and link hooks follow the same decisions as
+the upstream extension (in-app hosts, ad contexts, click-tracker unwrapping). Not ported: "View
+DMs anonymously" and "Disable typing status" (the direct-message targets upstream resolves
+structurally), "Ask before like", "Ask before refresh", "Disable video autoplay", "Remove build
+expired popup" and "Unlock developer options" (each needs build-time rewrites of bloks screens,
+build age fields or developer-option gates).
+================================================================================
+https://github.com/crimera/piko
+License: GPL-3.0. The Piko NOTICE's attribution requirement — "This NOTICE file must be preserved
+and retained in all distributions of the Source Code and any Derivative Works." — covers the
+material below; the file itself is retained verbatim at
+bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/NOTICE-piko, where it moved when the
+Piko bundle was withdrawn in the 2.10.0 release.
+Ported material: the Instagram download implementation under
+bundles/a092devs/src/main/java/io/github/nexalloy/a092devs/instagram/download/ —
+DownloadPatches.kt, DownloadFingerprints.kt, MediaExtractor.kt, InstagramDialog.kt and
+HighlightCover.kt — the download options of the post overflow menu, the reels and feed sheet
+menus, the story menu and its rows, the highlight long-press menu, the profile picture buttons,
+the media URL extraction and the Download/Instagram saving. This code shipped in this
+repository's Piko bundle until the 2.6.0 release replaced that bundle's Instagram side with the
+HushGram ports (commit 5d4f3b7^); it was restored unchanged apart from the package, the imports,
+the provenance comments and one deferred handler initialization.
 ================================================================================
 Akshayykadam/PixelBoard
 https://github.com/Akshayykadam/PixelBoard
@@ -116,5 +141,19 @@ hoo-dles/morphe-patches
 https://github.com/hoo-dles/morphe-patches
 License: GPL-3.0
 Ported material: Proton VPN delay and network permission patches.
+================================================================================
+kveld9/kveld-extra-morphe-patches
+https://github.com/kveld9/kveld-extra-morphe-patches
+License: GPL-3.0
+Ported material: patches/src/main/kotlin/app/morphe/patches/twitter/ — the X (Twitter) port:
+"Remove Ads" (TwitterRemoveAdsPatch.kt), "Unlock Video Downloads"
+(TwitterUnlockVideoDownloadsPatch.kt), "Block Update Screen" (TwitterBlockUpdateScreenPatch.kt),
+"Block Telemetry & Trackers" (TwitterBlockTelemetryPatch.kt, bytecode side), "Remove Premium
+Upsell" (TwitterRemovePremiumUpsellPatch.kt), "Control Video Auto Scroll"
+(TwitterControlVideoAutoScrollPatch.kt), "DM Debloat" (TwitterDmDebloatPatch.kt), "Pause Search
+Suggestions" (TwitterPauseSearchSuggestionsPatch.kt) and "Show Sensitive Media"
+(TwitterShowSensitiveMediaPatch.kt) — target tables, flag names and option defaults transcribed
+from the sources so they can be diffed against them. The upstream manifest and resource edits
+have no runtime equivalent and are not ported.
 ================================================================================
 

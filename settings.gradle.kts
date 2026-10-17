@@ -38,5 +38,4 @@ rootProject.name = "NexAlloyNext-Patches"
 include(":stub")
 include(":bundles:nexalloy")
 include(":bundles:2eno")
-include(":bundles:piko")
 include(":bundles:a092devs")

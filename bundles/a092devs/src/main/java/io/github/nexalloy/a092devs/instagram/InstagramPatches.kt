@@ -1,25 +1,47 @@
 package io.github.nexalloy.a092devs.instagram
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.os.Parcelable
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.view.WindowManager
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XC_MethodHook.MethodHookParam
 import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import io.github.nexalloy.PatcherLog
+import io.github.nexalloy.a092devs.instagram.download.DownloadMedia
 import io.github.nexalloy.patch
-import java.lang.reflect.Method
+import java.util.Locale
 
 /**
  * Instagram patches ported from SysAdminDoc/HushGram (GPL-3.0),
  * supporting Instagram 451.0.0.53.80, 450.0.0.46.79, 447.0.0.55.81, and compatible versions.
+ *
+ * Three kinds of mechanism are used, and only these:
+ *
+ * - InstagramRequestFilter hooks `TigonServiceLayer.startRequest`, the kept Instagram API entry
+ *   point (2eno's Instagram finders constrain the same class by name), and answers the matched
+ *   endpoints with an unreachable address. The ad, suggested, story-seen, live-viewer and
+ *   analytics rules all ride on it. The endpoints each rule matches are asserted in
+ *   InstagramPatchesTest.
+ * - Framework hooks: Window flag handling, ClipData text sharing and the screen capture
+ *   callbacks, none of which depend on Instagram's obfuscation.
+ * - The download menu hooks restored from this repository's own Piko bundle (see
+ *   instagram/download/ and the NOTICE).
+ *
+ * Removed in this pass, because they only logged or hooked class names that do not exist in
+ * release builds: "View DMs anonymously" and "Disable typing status" (both need the direct
+ * message targets upstream resolves structurally, HushGram direct/seen and direct/typing), and
+ * the log-only stubs "Ask before like", "Ask before refresh", "Disable video autoplay",
+ * "Remove build expired popup" and "Open developer options" (each has a real upstream
+ * implementation to port, from HushGram feed/confirm/, misc/buildexpiry/ and
+ * misc/developeroptions/). "Download any media" was restored from the Piko bundle instead.
+ * See the audit report for the backlog.
  */
 
 private const val FLAG_SECURE = 0x2000
@@ -30,24 +52,32 @@ private fun clearSecure(params: Any?) {
     layoutParams.flags = withoutSecure(layoutParams.flags)
 }
 
+/**
+ * The hosts that stay in the in-app browser, each with its subdomains: login, account linking,
+ * checkout and Meta's own pages need the in-app browser's bridges, and HushGram keeps them.
+ */
+private val IN_APP_HOSTS = listOf(
+    "instagram.com", "instagr.am", "ig.me", "facebook.com", "fb.com", "fb.me",
+    "fb.watch", "messenger.com", "meta.com", "threads.net", "threads.com",
+)
+
+/** The extra Instagram's browser launchers put the link's context in; an ad's is an IABAdsContext. */
+private const val IAB_CONTEXT_EXTRA = "EXTRA_IAB_CONTEXT"
+private const val ADS_CONTEXT_CLASS = "com.facebook.browser.iabcontext.IABAdsContext"
+
+/**
+ * Instagram's in-app browser, a kept class name HushGram anchors on; the patch fails when it is
+ * gone rather than letting links keep opening in an activity nothing redirects.
+ */
+private const val IN_APP_BROWSER_CLASS = "com.instagram.inappbrowser.fragments.BrowserLiteInMainProcessIGActivity"
+
 val HideAds = patch(
     name = "Hide ads",
     description = "Hides sponsored posts, reels, stories, and feed ad units without leaving gaps.",
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.ADS)
     InstagramRequestFilter.ensureHooks(classLoader)
-
-    // Hook feed item parsers and sponsored flags
-    runCatching {
-        for (className in listOf("com.instagram.feed.media.Media", "com.instagram.model.feed.FeedItem")) {
-            val clazz = runCatching { classLoader.loadClass(className) }.getOrNull() ?: continue
-            clazz.declaredMethods.filter { it.name == "isSponsored" || it.name == "hasAdDetails" }.forEach { method ->
-                XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(false))
-            }
-        }
-    }
-
-    PatcherLog.info { "a092devs Instagram: Hide ads hooks active" }
+    PatcherLog.info { "a092devs Instagram: ad endpoints are blocked through the Tigon filter" }
 }
 
 val HideSuggestedPosts = patch(
@@ -56,15 +86,7 @@ val HideSuggestedPosts = patch(
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.SUGGESTED)
     InstagramRequestFilter.ensureHooks(classLoader)
-
-    runCatching {
-        val feedItemClass = runCatching { classLoader.loadClass("com.instagram.feed.media.Media") }.getOrNull()
-        feedItemClass?.declaredMethods?.filter { it.name == "isSuggested" || it.name == "isEndOfFeed" }?.forEach { method ->
-            XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(false))
-        }
-    }
-
-    PatcherLog.info { "a092devs Instagram: Hide suggested posts active" }
+    PatcherLog.info { "a092devs Instagram: suggestion endpoints are blocked through the Tigon filter" }
 }
 
 val HideReelsAds = patch(
@@ -81,18 +103,7 @@ val ViewStoriesAnonymously = patch(
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.STORY_SEEN)
     InstagramRequestFilter.ensureHooks(classLoader)
-
-    // Also suppress direct story seen state changes
-    runCatching {
-        val seenClass = runCatching { classLoader.loadClass("com.instagram.reels.store.ReelStore") }.getOrNull()
-        seenClass?.declaredMethods?.filter { it.name.startsWith("markAsSeen") || it.name.startsWith("recordStorySeen") }?.forEach { method ->
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    param.result = null
-                }
-            })
-        }
-    }
+    PatcherLog.info { "a092devs Instagram: story seen receipts are blocked through the Tigon filter" }
 }
 
 val ViewLiveAnonymously = patch(
@@ -101,50 +112,6 @@ val ViewLiveAnonymously = patch(
 ) {
     InstagramRequestFilter.enable(InstagramRequestFilter.Rule.LIVE_VIEWER)
     InstagramRequestFilter.ensureHooks(classLoader)
-}
-
-val ViewDmsAnonymously = patch(
-    name = "View DMs anonymously",
-    description = "Stops sending read receipts so direct messages stay unread for the sender.",
-) {
-    runCatching {
-        val candidates = listOf(
-            "com.instagram.direct.send.DirectMutationManager",
-            "com.instagram.direct.realtime.DirectRealtimeSeenManager",
-        )
-        for (name in candidates) {
-            val clazz = runCatching { classLoader.loadClass(name) }.getOrNull() ?: continue
-            clazz.declaredMethods.filter { it.name.contains("Seen") || it.name.contains("MarkRead") }.forEach { method ->
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        param.result = null
-                    }
-                })
-            }
-        }
-    }
-}
-
-val DisableTypingStatus = patch(
-    name = "Disable typing status",
-    description = "Stops Instagram from notifying others in chats that you are typing.",
-) {
-    runCatching {
-        val candidates = listOf(
-            "com.instagram.direct.send.DirectTypingStatusSender",
-            "com.instagram.direct.realtime.DirectTypingIndicatorDispatcher",
-        )
-        for (name in candidates) {
-            val clazz = runCatching { classLoader.loadClass(name) }.getOrNull() ?: continue
-            clazz.declaredMethods.filter { it.name.contains("sendTyping") || it.name.contains("updateTyping") }.forEach { method ->
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        param.result = null
-                    }
-                })
-            }
-        }
-    }
 }
 
 val AllowScreenshots = patch(
@@ -164,6 +131,7 @@ val AllowScreenshots = patch(
         }
     }
 
+    // Window and its PhoneWindow implementation; PhoneWindow overrides setAttributes.
     for (className in listOf("android.view.Window", "com.android.internal.policy.PhoneWindow")) {
         val window = runCatching { classLoader.loadClass(className) }.getOrNull() ?: continue
         window.declaredMethods
@@ -171,10 +139,16 @@ val AllowScreenshots = patch(
             .forEach { XposedBridge.hookMethod(it, hook) }
     }
 
+    // WindowManagerImpl receives the LayoutParams the window finally gets.
     runCatching { classLoader.loadClass("android.view.WindowManagerImpl") }
         .getOrNull()
         ?.declaredMethods
-        ?.filter { it.name == "addView" || it.name == "updateViewLayout" }
+        ?.filter { method ->
+            method.parameterTypes.size == 2 &&
+                method.parameterTypes[0] == View::class.java &&
+                method.parameterTypes[1] == ViewGroup.LayoutParams::class.java &&
+                (method.name == "addView" || method.name == "updateViewLayout")
+        }
         ?.forEach { XposedBridge.hookMethod(it, hook) }
 
     PatcherLog.info { "a092devs Instagram: FLAG_SECURE hooks installed" }
@@ -184,30 +158,53 @@ val BlockScreenshotDetection = patch(
     name = "Block screenshot detection",
     description = "Stops Instagram from notifying people when you take screenshots or screen recordings.",
 ) {
+    var observerHooked = false
+    var frameworkHooked = 0
+
+    // The photo library observer every Meta screenshot detector shares keeps its class name in
+    // release builds; returning at once in its onChange hides every screenshot from Instagram.
     runCatching {
         val observer = classLoader.loadClass("com.facebook.screenshot.ScreenshotContentObserver")
-        observer.declaredMethods.filter { it.name == "onChange" }.forEach { method ->
-            XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(null))
+        val onChange = observer.declaredMethods.single {
+            it.name == "onChange" && it.returnType == Void.TYPE &&
+                it.parameterTypes.contentEquals(arrayOf(java.lang.Boolean.TYPE, Uri::class.java))
         }
-    }
+        XposedBridge.hookMethod(onChange, object : XC_MethodReplacement() {
+            override fun replaceHookedMethod(param: MethodHookParam): Any? = null
+        })
+        observerHooked = true
+    }.onFailure { PatcherLog.info(it) { "a092devs Instagram: screenshot observer hook skipped" } }
 
+    // Android 14+ activity screen capture callbacks; Android 15+ screen recording callbacks.
     val noop = object : XC_MethodReplacement() {
-        override fun replaceHookedMethod(param: MethodHookParam): Any? {
-            val method = param.method
-            return if (method is Method && method.returnType == Integer.TYPE) 0 else null
-        }
+        override fun replaceHookedMethod(param: MethodHookParam): Any? = null
     }
-
     if (Build.VERSION.SDK_INT >= 34) {
         for (className in listOf("android.app.Activity", "androidx.activity.ComponentActivity")) {
             val activity = runCatching { classLoader.loadClass(className) }.getOrNull() ?: continue
             activity.declaredMethods
                 .filter { it.name == "registerScreenCaptureCallback" && it.parameterTypes.size == 2 }
-                .forEach { XposedBridge.hookMethod(it, noop) }
+                .forEach {
+                    XposedBridge.hookMethod(it, noop)
+                    frameworkHooked++
+                }
         }
     }
+    if (Build.VERSION.SDK_INT >= 35) {
+        runCatching { classLoader.loadClass("android.view.WindowManagerImpl") }
+            .getOrNull()
+            ?.declaredMethods
+            ?.filter { it.name == "addScreenRecordingCallback" || it.name == "removeScreenRecordingCallback" }
+            ?.forEach {
+                XposedBridge.hookMethod(it, noop)
+                frameworkHooked++
+            }
+    }
 
-    PatcherLog.info { "a092devs Instagram: Screenshot detection hooks installed" }
+    if (!observerHooked && frameworkHooked == 0) {
+        throw IllegalStateException("Block screenshot detection: no Instagram observer or framework call was found")
+    }
+    PatcherLog.info { "a092devs Instagram: screenshot detection hooks installed (observer=$observerHooked, framework=$frameworkHooked)" }
 }
 
 val SanitizeShareLinks = patch(
@@ -231,22 +228,103 @@ val SanitizeShareLinks = patch(
 
 val OpenLinksExternally = patch(
     name = "Open links in external browser",
-    description = "Opens links directly in your default browser instead of Instagram's in-app browser.",
+    description = "Opens web links directly in your default browser instead of Instagram's in-app browser. Instagram pages and links opened for an ad stay in the app.",
 ) {
-    runCatching {
-        val inAppBrowserClass = classLoader.loadClass("com.facebook.browser.lite.BrowserLiteActivity")
-        inAppBrowserClass.declaredMethods.filter { it.name == "onCreate" }.forEach { method ->
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    val activity = param.thisObject as? Activity ?: return
-                    val url = activity.intent?.dataString ?: return
-                    if (InstagramLinks.openExternally(activity, url)) {
-                        activity.finish()
-                        param.result = null
-                    }
-                }
-            })
+    // Instagram's own in-app browser is the activity HushGram anchors on; it is a kept name the
+    // manifest declares, and the link launchers route through it. Facebook's browser classes are
+    // hooked too for surfaces that reach them. The redirect runs after each activity's own
+    // lifecycle has finished, so the framework never sees a skipped super call (a before-hook
+    // that overwrote onCreate used to make the activity crash with SuperNotCalledException).
+    var instagramBrowserHooked = false
+    var hooked = 0
+    val redirect = object : XC_MethodHook() {
+        override fun afterHookedMethod(param: MethodHookParam) {
+            val activity = param.thisObject as? Activity ?: return
+            val intent = if (param.method.name == "onNewIntent") {
+                param.args.getOrNull(0) as? Intent
+            } else {
+                activity.intent
+            }
+            openExternally(activity, intent)
         }
+    }
+    for (className in listOf(
+        IN_APP_BROWSER_CLASS,
+        "com.facebook.browser.litev2.lite.BrowserLiteDIActivity",
+        "com.facebook.browser.lite.BrowserLiteActivity",
+    )) {
+        val browser = runCatching { classLoader.loadClass(className) }.getOrNull() ?: continue
+        var classHooked = 0
+        for (method in browser.declaredMethods) {
+            val hookable = when (method.name) {
+                "onCreate" -> method.parameterTypes.contentEquals(arrayOf(Bundle::class.java))
+                "onNewIntent" -> method.parameterTypes.contentEquals(arrayOf(Intent::class.java))
+                else -> false
+            }
+            if (hookable) {
+                XposedBridge.hookMethod(method, redirect)
+                hooked++
+                classHooked++
+            }
+        }
+        if (className == IN_APP_BROWSER_CLASS && classHooked > 0) instagramBrowserHooked = true
+    }
+    if (!instagramBrowserHooked) {
+        throw IllegalStateException("Open links in external browser: Instagram's in-app browser activity was not found (a new name?)")
+    }
+    PatcherLog.info { "a092devs Instagram: $hooked in-app browser lifecycle hooks installed" }
+}
+
+/**
+ * Opens the intent's web link in the user's browser. The link is resolved through Instagram's
+ * click tracker, checked as it is sent, and sent with Meta's click id stripped; Instagram-family
+ * pages and links opened for an ad stay in the in-app browser, as HushGram keeps them.
+ */
+private fun openExternally(activity: Activity, intent: Intent?) {
+    val uri = intent?.data ?: return
+    if (!isWebLink(uri)) return
+    if (isAdLink(activity, intent)) return
+    val target = Uri.parse(InstagramLinks.unwrapShims(uri.toString()))
+    val host = target.host?.lowercase(Locale.ROOT) ?: return
+    if (IN_APP_HOSTS.any { host == it || host.endsWith(".$it") }) return
+    // fbclid is Meta's click id; the site the link opens could otherwise tell Meta it was
+    // followed. Nothing else in the link changes.
+    val cleaned = Uri.parse(InstagramLinks.withoutClickId(target.toString()))
+    if (!isWebLink(cleaned)) return
+    if (InstagramLinks.openExternally(activity, cleaned.toString())) {
+        PatcherLog.info { "a092devs Instagram: opened $host in the external browser" }
+        runCatching { activity.finish() }
+    }
+}
+
+/** Whether [uri] is a web address that can be sent to a browser, host included. */
+private fun isWebLink(uri: Uri): Boolean {
+    val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
+    return (scheme == "http" || scheme == "https") && !uri.host.isNullOrEmpty()
+}
+
+/**
+ * Whether the link was opened for an ad, which stays in the app. A link followed inside a page
+ * the browser already shows comes with no context of its own, so the context of the page it was
+ * followed from is used; context that cannot be read counts as an ad, so the link stays where
+ * Instagram put it.
+ */
+@Suppress("DEPRECATION")
+private fun isAdLink(activity: Activity, intent: Intent): Boolean {
+    return try {
+        var context: Parcelable? = intent.getParcelableExtra(IAB_CONTEXT_EXTRA)
+        if (context == null && activity.intent !== intent) {
+            context = activity.intent?.getParcelableExtra(IAB_CONTEXT_EXTRA)
+        }
+        var type: Class<*>? = context?.javaClass
+        while (type != null) {
+            if (type.name == ADS_CONTEXT_CLASS) return true
+            type = type.superclass
+        }
+        false
+    } catch (e: Exception) {
+        PatcherLog.info(e) { "a092devs Instagram: the link's context could not be read, leaving it in the app" }
+        true
     }
 }
 
@@ -258,66 +336,16 @@ val DisableAnalytics = patch(
     InstagramRequestFilter.ensureHooks(classLoader)
 }
 
-val DownloadMedia = patch(
-    name = "Download any media",
-    description = "Allows saving reels, stories, video posts, and photos directly without watermarks.",
-) {
-    PatcherLog.info { "a092devs Instagram: Download media enabled" }
-}
-
-val AskBeforeLike = patch(
-    name = "Ask before like",
-    description = "Confirms before a post is liked so stray taps do not accidentally like posts.",
-) {
-    PatcherLog.info { "a092devs Instagram: Ask before like active" }
-}
-
-val AskBeforeRefresh = patch(
-    name = "Ask before refresh",
-    description = "Confirms before pulling down refreshes the feed so accidental gestures do not discard what you were reading.",
-) {
-    PatcherLog.info { "a092devs Instagram: Ask before refresh active" }
-}
-
-val DisableVideoAutoplay = patch(
-    name = "Disable video autoplay",
-    description = "Prevents feed videos and reels from playing automatically.",
-) {
-    PatcherLog.info { "a092devs Instagram: Disable video autoplay active" }
-}
-
-val RemoveBuildExpiredPopup = patch(
-    name = "Remove build expired popup",
-    description = "Suppresses beta build expiration warning popups.",
-) {
-    PatcherLog.info { "a092devs Instagram: Remove build expired popup active" }
-}
-
-val UnlockDeveloperOptions = patch(
-    name = "Open developer options",
-    description = "Enables access to Instagram internal developer options and quick experiment flags.",
-) {
-    PatcherLog.info { "a092devs Instagram: Open developer options active" }
-}
-
 val InstagramPatches = arrayOf(
     HideAds,
     HideSuggestedPosts,
     HideReelsAds,
     ViewStoriesAnonymously,
     ViewLiveAnonymously,
-    ViewDmsAnonymously,
-    DisableTypingStatus,
     AllowScreenshots,
     BlockScreenshotDetection,
     SanitizeShareLinks,
     OpenLinksExternally,
-    DisableAnalytics,
     DownloadMedia,
-    AskBeforeLike,
-    AskBeforeRefresh,
-    DisableVideoAutoplay,
-    RemoveBuildExpiredPopup,
-    UnlockDeveloperOptions,
+    DisableAnalytics,
 )
-
