@@ -21,14 +21,18 @@ class InstagramPatchesTest {
         assertEquals(Rule.REELS_ADS, rule("https://i.instagram.com/api/v1/feed/injected_reels_media/"))
         assertEquals(Rule.ADS, rule("https://i.instagram.com/api/v1/async_ads/"))
         assertEquals(Rule.SUGGESTED, rule("https://i.instagram.com/api/v1/discover/chaining/"))
+        assertEquals(Rule.DM_SEEN, rule("https://i.instagram.com/api/v1/direct_v2/visual_threads/123/item_seen/"))
         assertNull(rule("https://i.instagram.com/api/v1/feed/timeline/"))
 
         val adsUri = URI("https://i.instagram.com/api/v1/async_ads/")
         val reelsAdsUri = URI("https://i.instagram.com/api/v1/feed/injected_reels_media/")
+        val dmSeenUri = URI("https://i.instagram.com/api/v1/direct_v2/visual_threads/123/item_seen/")
         InstagramRequestFilter.enable(Rule.ADS)
         InstagramRequestFilter.enable(Rule.REELS_ADS)
+        InstagramRequestFilter.enable(Rule.DM_SEEN)
         assertTrue(InstagramRequestFilter.shouldBlock(adsUri))
         assertTrue(InstagramRequestFilter.shouldBlock(reelsAdsUri))
+        assertTrue(InstagramRequestFilter.shouldBlock(dmSeenUri))
         assertFalse(InstagramRequestFilter.shouldBlock(URI("https://i.instagram.com/api/v1/feed/timeline/")))
     }
 
@@ -145,5 +149,40 @@ class InstagramPatchesTest {
         assertEquals("NexAlloyNext/Instagram", settings.customFolder)
         assertFalse(prefs.contains("custom_download_folder"))
     }
+
+    @Test
+    fun testInstagramPatchesRegistration() {
+        val patchNames = InstagramPatches.map { it.name }.toSet()
+
+        // Original patches
+        assertTrue("Hide ads" in patchNames)
+        assertTrue("Hide suggested posts" in patchNames)
+        assertTrue("Hide reels ads" in patchNames)
+        assertTrue("View stories anonymously" in patchNames)
+        assertTrue("View live anonymously" in patchNames)
+        assertTrue("Stop story auto-advance" in patchNames)
+        assertTrue("Hide typing status" in patchNames)
+        assertTrue("Turn off double tap to like" in patchNames)
+        assertTrue("Allow screenshots" in patchNames)
+        assertTrue("Block screenshot detection" in patchNames)
+        assertTrue("Sanitize share links" in patchNames)
+        assertTrue("Open links in external browser" in patchNames)
+        assertTrue("Download media" in patchNames)
+        assertTrue("Disable analytics" in patchNames)
+
+        // The 9 requested features from HushGram
+        assertTrue("Turn off HDR brightness boosts" in patchNames)
+        assertTrue("View DM photos and videos anonymously" in patchNames)
+        assertTrue("Upload stories at full quality" in patchNames)
+        assertTrue("Tap a feed video to pause it" in patchNames)
+        assertTrue("Show if a profile follows you" in patchNames)
+        assertTrue("See who a story mentions" in patchNames)
+        assertTrue("Show a post's exact time" in patchNames)
+        assertTrue("Save profile picture" in patchNames)
+        assertTrue("Open developer options" in patchNames)
+
+        assertEquals(23, InstagramPatches.size)
+    }
 }
+
 

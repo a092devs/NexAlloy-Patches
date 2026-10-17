@@ -20,6 +20,7 @@ object InstagramRequestFilter {
         STORY_SEEN,
         LIVE_VIEWER,
         ANALYTICS,
+        DM_SEEN,
     }
 
     private val enabledRules: MutableSet<Rule> = ConcurrentHashMap.newKeySet()
@@ -39,6 +40,10 @@ object InstagramRequestFilter {
             host.contains("graph.instagram.com") ||
                 host.contains("graph.facebook.com") ||
                 path.contains("/logging_client_events") -> Rule.ANALYTICS
+
+            path.contains("/direct_v2/visual_threads/") && path.contains("/item_seen/") ||
+                path.contains("/visual_threads/") && path.contains("/item_seen/") ||
+                path.contains("send_visual_item_seen_marker") -> Rule.DM_SEEN
 
             path.contains("/api/v2/media/seen/") -> Rule.STORY_SEEN
 

@@ -438,4 +438,13 @@ val InstagramPatches = arrayOf(
     OpenLinksExternally,
     DownloadMedia,
     DisableAnalytics,
+    ViewDmMediaAnonymously,
+    TurnOffHdrBoosts,
+    UploadStoriesAtFullQuality,
+    TapFeedVideoToPause,
+    ShowIfProfileFollowsYou,
+    SeeWhoStoryMentions,
+    ShowPostExactTime,
+    SaveProfilePicture,
+    OpenDeveloperOptions,
 )
